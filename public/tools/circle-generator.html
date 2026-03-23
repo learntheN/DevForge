@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>圆生成器</title>
+  <!-- 必须使用本地资源 -->
+  <script src="/assets/js/tailwind.js"></script>
+  <link rel="stylesheet" href="/assets/css/fontawesome.min.css">
+  <style>
+    /* 防闪烁样式（必须包含） */
+    body { opacity: 0; transition: opacity 0.1s; }
+    body.ready { opacity: 1; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    /* 滚动条样式 */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    /* Toast 提示样式 */
+    .toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; font-weight: 500; z-index: 1000; animation: fadeIn 0.3s ease-out; }
+    .toast-success { background: #22c55e; }
+    .toast-error { background: #ef4444; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    /* 自定义样式 */
+    .canvas-container {
+      background-image: linear-gradient(45deg, #f8fafc 25%, transparent 25%), linear-gradient(-45deg, #f8fafc 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #f8fafc 75%), linear-gradient(-45deg, transparent 75%, #f8fafc 75%);
+      background-size: 20px 20px;
+      background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <!-- 工具内容 -->
+  <div class="container mx-auto px-4 py-8">
+    <div class="mb-8">
+      <h1 class="text-3xl font-bold text-gray-800 mb-2">
+        <i class="fas fa-circle text-blue-500 mr-3"></i>圆生成器
+      </h1>
+      <p class="text-gray-600">输入半径，实时生成圆形并计算其属性，支持自定义颜色和下载图片</p>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <!-- 左侧控制面板 -->
+      <div class="bg-white rounded-xl shadow-lg p-6">
+        <h2 class="text-xl font-semibold text-gray-800 mb-6 pb-3 border-b border-gray-200">
+          <i class="fas fa-sliders-h text-blue-500 mr-2"></i>控制面板
+        </h2>
+        
+        <!-- 半径控制 -->
+        <div class="mb-8">
+          <label class="block text-gray-700 font-medium mb-3">
+            <i class="fas fa-ruler text-blue-500 mr-2"></i>半径 (像素)
+          </label>
+          
+          <div class="flex items-center space-x-4 mb-4">
+            <input 
+              type="range" 
+              id="radiusSlider" 
+              min="10" 
+              max="300" 
+              value="150" 
+              class="flex-1 h-2 bg-blue-100 rounded-lg appearance-none cursor-pointer"
+            >
+            <div class="relative w-32">
+              <input 
+                type="number" 
+                id="radiusInput" 
+                value="150" 
+                min="10" 
+                max="500" 
+                class="w-full px-4 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+              <span class="absolute right-3 top-2 text-gray-500">px</span>
+            </div>
+          </div>
+          <div class="flex justify-between text-sm text-gray-500">
+            <span>10px</span>
+            <span>300px</span>
+          </div>
+        </div>
+        
+        <!-- 颜色选择 -->
+        <div class="mb-8">
+          <label class="block text-gray-700 font-medium mb-3">
+            <i class="fas fa-palette text-blue-500 mr-2"></i>圆形颜色
+          </label>
+          <div class="flex flex-wrap gap-3">
+            <button data-color="#3b82f6" class="color-btn w-10 h-10 rounded-full bg-blue-500 border-2 border-blue-600 shadow-sm"></button>
+            <button data-color="#ef4444" class="color-btn w-10 h-10 rounded-full bg-red-500 border-2 border-gray-300 shadow-sm"></button>
+            <button data-color="#10b981" class="color-btn w-10 h-10 rounded-full bg-green-500 border-2 border-gray-300 shadow-sm"></button>
+            <button data-color="#f59e0b" class="color-btn w-10 h-10 rounded-full bg-yellow-500 border-2 border-gray-300 shadow-sm"></button>
+            <button data-color="#8b5cf6" class="color-btn w-10 h-10 rounded-full bg-purple-500 border-2 border-gray-300 shadow-sm"></button>
+            <button data-color="#ec4899" class="color-btn w-10 h-10 rounded-full bg-pink-500 border-2 border-gray-300 shadow-sm"></button>
+            <button data-color="#000000" class="color-btn w-10 h-10 rounded-full bg-black border-2 border-gray-300 shadow-sm"></button>
+          </div>
+          <div class="mt-4">
+            <label class="block text-gray-700 text-sm mb-2">自定义颜色</label>
+            <input 
+              type="color" 
+              id="customColor" 
+              value="#3b82f6" 
+              class="w-full h-10 cursor-pointer rounded-lg border border-gray-300"
+            >
+          </div>
+        </div>
+        
+        <!-- 下载按钮 -->
+        <div class="mt-10">
+          <button 
+            id="downloadBtn" 
+            class="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition duration-200 flex items-center justify-center"
+          >
+            <i class="fas fa-download mr-2"></i>下载圆形图片 (PNG)
+          </button>
+          <p class="text-gray-500 text-sm mt-2 text-center">图片尺寸将根据圆形大小自动调整</p>
+        </div>
+      </div>
+      
+      <!-- 右侧预览区域 -->
+      <div class="bg-white rounded-xl shadow-lg p-6">
+        <h2 class="text-xl font-semibold text-gray-800 mb-6 pb-3 border-b border-gray-200">
+          <i class="fas fa-eye text-blue-500 mr-2"></i>预览
+        </h2>
+        
+        <div class="canvas-container rounded-lg overflow-hidden mb-6 flex items-center justify-center" style="height: 400px;">
+          <canvas id="circleCanvas" width="400" height="400"></canvas>
+        </div>
+        
+        <div class="text-center text-gray-600">
+          <p class="text-sm">圆形在网格背景上显示，便于观察大小和位置</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 属性计算结果 -->
+    <div class="mt-8 bg-white rounded-xl shadow-lg p-6">
+      <h2 class="text-xl font-semibold text-gray-800 mb-6 pb-3 border-b border-gray-200">
+        <i class="fas fa-calculator text-blue-500 mr-2"></i>圆形属性
+      </h2>
+      
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-blue-50 rounded-lg p-5 border border-blue-100">
+          <div class="flex items-center mb-2">
+            <div class="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mr-3">
+              <i class="fas fa-arrows-alt-h text-blue-600"></i>
+            </div>
+            <h3 class="font-semibold text-gray-800">直径</h3>
+          </div>
+          <p id="diameter" class="text-2xl font-bold text-blue-600">300 px</p>
+          <p class="text-gray-500 text-sm mt-1">直径 = 2 × 半径</p>
+        </div>
+        
+        <div class="bg-green-50 rounded-lg p-5 border border-green-100">
+          <div class="flex items-center mb-2">
+            <div class="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center mr-3">
+              <i class="fas fa-circle-notch text-green-600"></i>
+            </div>
+            <h3 class="font-semibold text-gray-800">周长</h3>
+          </div>
+          <p id="circumference" class="text-2xl font-bold text-green-600">942.48 px</p>
+          <p class="text-gray-500 text-sm mt-1">周长 = 2 × π × 半径</p>
+        </div>
+        
+        <div class="bg-purple-50 rounded-lg p-5 border border-purple-100">
+          <div class="flex items-center mb-2">
+            <div class="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center mr-3">
+              <i class="fas fa-expand-arrows-alt text-purple-600"></i>
+            </div>
+            <h3 class="font-semibold text-gray-800">面积</h3>
+          </div>
+          <p id="area" class="text-2xl font-bold text-purple-600">70,685.83 px²</p>
+          <p class="text-gray-500 text-sm mt-1">面积 = π × 半径²</p>
+        </div>
+      </div>
+      
+      <div class="mt-6 pt-6 border-t border-gray-200 text-gray-600 text-sm">
+        <p><i class="fas fa-info-circle text-blue-500 mr-2"></i>π 值使用: 3.141592653589793</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 初始化（必须在最后添加 ready 类）
+    document.addEventListener('DOMContentLoaded', () => {
+      // 获取DOM元素
+      const canvas = document.getElementById('circleCanvas');
+      const ctx = canvas.getContext('2d');
+      const radiusSlider = document.getElementById('radiusSlider');
+      const radiusInput = document.getElementById('radiusInput');
+      const customColor = document.getElementById('customColor');
+      const downloadBtn = document.getElementById('downloadBtn');
+      const colorButtons = document.querySelectorAll('.color-btn');
+      
+      // 显示元素
+      const diameterEl = document.getElementById('diameter');
+      const circumferenceEl = document.getElementById('circumference');
+      const areaEl = document.getElementById('area');
+      
+      // 当前状态
+      let currentRadius = 150;
+      let currentColor = '#3b82f6';
+      
+      // 设置第一个颜色按钮为选中状态
+      colorButtons[0].classList.add('border-blue-600');
+      colorButtons[0].classList.remove('border-gray-300');
+      
+      // 初始化绘制
+      drawCircle();
+      updateProperties();
+      
+      // 半径滑块事件
+      radiusSlider.addEventListener('input', (e) => {
+        currentRadius = parseInt(e.target.value);
+        radiusInput.value = currentRadius;
+        drawCircle();
+        updateProperties();
+      });
+      
+      // 半径输入框事件
+      radiusInput.addEventListener('input', (e) => {
+        let value = parseInt(e.target.value);
+        if (isNaN(value)) value = 10;
+        if (value < 10) value = 10;
+        if (value > 500) value = 500;
+        
+        currentRadius = value;
+        radiusSlider.value = value;
+        radiusInput.value = value;
+        drawCircle();
+        updateProperties();
+      });
+      
+      // 预设颜色按钮事件
+      colorButtons.forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const color = e.target.dataset.color;
+          currentColor = color;
+          customColor.value = color;
+          
+          // 更新按钮选中状态
+          colorButtons.forEach(b => {
+            b.classList.add('border-gray-300');
+            b.classList.remove('border-blue-600');
+          });
+          e.target.classList.remove('border-gray-300');
+          e.target.classList.add('border-blue-600');
+          
+          drawCircle();
+        });
+      });
+      
+      // 自定义颜色事件
+      customColor.addEventListener('input', (e) => {
+        currentColor = e.target.value;
+        
+        // 清除所有按钮的选中状态
+        colorButtons.forEach(b => {
+          b.classList.add('border-gray-300');
+          b.classList.remove('border-blue-600');
+        });
+        
+        drawCircle();
+      });
+      
+      // 下载按钮事件
+      downloadBtn.addEventListener('click', () => {
+        // 创建临时canvas用于下载
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        // 设置canvas尺寸（包含一些边距）
+        const size = currentRadius * 2 + 40;
+        tempCanvas.width = size;
+        tempCanvas.height = size;
+        
+        // 绘制白色背景
+        tempCtx.fillStyle = 'white';
+        tempCtx.fillRect(0, 0, size, size);
+        
+        // 绘制圆形
+        tempCtx.beginPath();
+        tempCtx.arc(size/2, size/2, currentRadius, 0, Math.PI * 2);
+        tempCtx.fillStyle = currentColor;
+        tempCtx.fill();
+        
+        // 创建下载链接
+        const link = document.createElement('a');
+        link.download = `circle-${currentRadius}px-${currentColor.replace('#', '')}.png`;
+        link.href = tempCanvas.toDataURL('image/png');
+        link.click();
+        
+        showToast('圆形图片下载成功！', 'success');
+      });
+      
+      // 绘制圆形函数
+      function drawCircle() {
+        // 清除canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // 设置canvas尺寸为圆形直径（加上一些边距）
+        const canvasSize = Math.max(400, currentRadius * 2 + 40);
+        canvas.width = canvasSize;
+        canvas.height = canvasSize;
+        
+        // 绘制圆形
+        ctx.beginPath();
+        ctx.arc(canvas.width/2, canvas.height/2, currentRadius, 0, Math.PI * 2);
+        ctx.fillStyle = currentColor;
+        ctx.fill();
+        
+        // 绘制圆形边框
+        ctx.beginPath();
+        ctx.arc(canvas.width/2, canvas.height/2, currentRadius, 0, Math.PI * 2);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#1e40af';
+        ctx.stroke();
+        
+        // 绘制圆心标记
+        ctx.beginPath();
+        ctx.arc(canvas.width/2, canvas.height/2, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = '#1e40af';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        
+        // 绘制半径线
+        ctx.beginPath();
+        ctx.moveTo(canvas.width/2, canvas.height/2);
+        ctx.lineTo(canvas.width/2 + currentRadius, canvas.height/2);
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        // 绘制半径标签
+        ctx.font = '14px Arial';
+        ctx.fillStyle = '#ef4444';
+        ctx.textAlign = 'center';
+        ctx.fillText(`半径: ${currentRadius}px`, canvas.width/2 + currentRadius/2, canvas.height/2 - 10);
+      }
+      
+      // 更新属性计算函数
+      function updateProperties() {
+        const π = Math.PI;
+        const diameter = currentRadius * 2;
+        const circumference = 2 * π * currentRadius;
+        const area = π * currentRadius * currentRadius;
+        
+        diameterEl.textContent = `${diameter.toFixed(0)} px`;
+        circumferenceEl.textContent = `${circumference.toFixed(2)} px`;
+        areaEl.textContent = `${area.toFixed(2)} px²`;
+      }
+      
+      // Toast 函数（推荐包含）
+      function showToast(message, type = 'success') {
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} mr-2"></i>${message}`;
+        document.body.appendChild(toast);
+        setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 2000);
+      }
+      
+      // 显示页面（必须）
+      document.body.classList.add('ready');
+    });
+  </script>
+</body>
+</html>

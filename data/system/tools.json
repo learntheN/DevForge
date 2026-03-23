@@ -1,0 +1,123 @@
+{
+  "registry": [
+    {
+      "id": "db-export",
+      "name": "数据库导出",
+      "icon": "fa-database",
+      "color": "blue",
+      "desc": "可视化数据库初始化语句导出",
+      "url": "/tools/db-export.html"
+    },
+    {
+      "id": "keygen",
+      "name": "密钥生成器",
+      "icon": "fa-key",
+      "color": "green",
+      "desc": "生成安全的随机密码和密钥",
+      "url": "/tools/keygen.html"
+    },
+    {
+      "id": "notebook",
+      "name": "笔记本",
+      "icon": "fa-book",
+      "color": "purple",
+      "desc": "支持 Markdown 的笔记管理工具",
+      "url": "/tools/notebook.html"
+    },
+    {
+      "id": "json-format",
+      "name": "JSON格式化",
+      "icon": "fa-code",
+      "color": "orange",
+      "desc": "JSON 格式化、压缩、去除转义",
+      "url": "/tools/json-format.html"
+    },
+    {
+      "id": "timestamp",
+      "name": "时间戳转换",
+      "icon": "fa-clock",
+      "color": "cyan",
+      "desc": "时间戳与日期时间互转",
+      "url": "/tools/timestamp.html"
+    },
+    {
+      "id": "bookmarks",
+      "name": "网站收藏",
+      "icon": "fa-bookmark",
+      "color": "pink",
+      "desc": "收藏常用网站，支持分类管理",
+      "url": "/tools/bookmarks.html"
+    },
+    {
+      "id": "color-picker",
+      "name": "颜色选择器",
+      "icon": "fa-palette",
+      "color": "purple",
+      "desc": "选择、转换和复制颜色值，支持 HEX、RGB、HSL 格式",
+      "url": "/tools/color-picker.html"
+    },
+    {
+      "id": "circle-generator",
+      "name": "圆生成器",
+      "icon": "fa-circle",
+      "color": "blue",
+      "desc": "输入半径，实时计算圆的直径、周长、面积，并可视化显示圆形",
+      "url": "/tools/circle-generator.html"
+    },
+    {
+      "id": "image-base64-converter",
+      "name": "图片Base64互转",
+      "icon": "fa-image",
+      "color": "blue",
+      "desc": "支持图片与Base64编码相互转换，实时预览和下载",
+      "url": "/tools/image-base64-converter.html"
+    },
+    {
+      "id": "timezone-clock",
+      "name": "时区时钟",
+      "icon": "fa-clock",
+      "color": "blue",
+      "desc": "创建一个时区时钟工具，显示多个主要时区的当前时间。功能包括：\n1. 显示主要时区（UTC、北京、纽约...",
+      "url": "/tools/timezone-clock.html",
+      "version": 1,
+      "versionHistory": [
+        {
+          "version": 1,
+          "file": "timezone-clock_v1.html",
+          "adoptedAt": "2026-03-18T07:08:56.068Z",
+          "taskId": "task-1773816595088"
+        }
+      ]
+    },
+    {
+      "id": "sudoku-game",
+      "name": "数独游戏",
+      "icon": "fa-puzzle-piece",
+      "color": "blue",
+      "desc": "经典数独游戏，支持基本玩法和验证功能",
+      "url": "/tools/sudoku-game.html",
+      "version": 1
+    },
+    {
+      "id": "ssh-remote",
+      "name": "SSH 远程连接",
+      "icon": "fa-terminal",
+      "color": "green",
+      "desc": "通过 SSH 协议远程连接和管理 Linux 服务器",
+      "url": "/tools/ssh-remote.html",
+      "version": 1
+    }
+  ],
+  "sidebar": [
+    "db-export",
+    "keygen",
+    "notebook",
+    "json-format",
+    "timestamp",
+    "bookmarks",
+    "color-picker",
+    "image-base64-converter",
+    "sudoku-game",
+    "ssh-remote"
+  ]
+}

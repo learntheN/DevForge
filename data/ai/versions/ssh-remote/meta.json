@@ -1,0 +1,13 @@
+{
+  "toolId": "ssh-remote",
+  "name": "SSH 远程连接",
+  "currentVersion": 1,
+  "versions": [
+    {
+      "version": 1,
+      "file": "v1.html",
+      "adoptedAt": "2026-03-18T10:44:12.759Z",
+      "taskId": "task-1773827910450"
+    }
+  ]
+}

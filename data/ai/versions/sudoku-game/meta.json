@@ -1,0 +1,13 @@
+{
+  "toolId": "sudoku-game",
+  "name": "数独游戏",
+  "currentVersion": 1,
+  "versions": [
+    {
+      "version": 1,
+      "file": "v1.html",
+      "adoptedAt": "2026-03-18T09:26:24.754Z",
+      "taskId": "task-1773824703465"
+    }
+  ]
+}

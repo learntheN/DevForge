@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>时间戳转换工具</title>
+  <script src="/assets/js/tailwind.js"></script>
+  <link rel="stylesheet" href="/assets/css/fontawesome.min.css">
+  <style>
+    body { opacity: 0; transition: opacity 0.1s; }
+    body.ready { opacity: 1; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; font-weight: 500; z-index: 1000; animation: fadeIn 0.3s ease-out; }
+    .toast-success { background: #22c55e; }
+    .toast-error { background: #ef4444; }
+    .toast-info { background: #3b82f6; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    .time-card { transition: all 0.2s; }
+    .time-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px -5px rgba(0,0,0,0.1); }
+    .copy-btn { opacity: 0; transition: opacity 0.2s; }
+    .time-row:hover .copy-btn { opacity: 1; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div class="p-6 max-w-4xl mx-auto">
+    <!-- 头部 -->
+    <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-cyan-500 rounded-xl flex items-center justify-center text-white text-xl">
+          <i class="fas fa-clock"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-gray-900">时间戳转换工具</h1>
+          <p class="text-sm text-gray-500">时间戳与日期时间互转</p>
+        </div>
+      </div>
+      <div id="currentTimestamp" class="text-right">
+        <p class="text-xs text-gray-500">当前时间戳</p>
+        <p class="text-lg font-mono font-bold text-cyan-600 cursor-pointer" onclick="copyText(this.textContent)"></p>
+      </div>
+    </div>
+
+    <!-- 当前时间 -->
+    <div class="bg-gradient-to-r from-cyan-500 to-blue-500 rounded-xl shadow-lg p-6 mb-6 text-white">
+      <div class="text-center">
+        <p class="text-sm opacity-80 mb-1">北京时间 (UTC+8)</p>
+        <p id="currentTime" class="text-3xl font-bold font-mono"></p>
+        <p id="currentDate" class="text-sm opacity-80 mt-1"></p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- 时间戳转日期 -->
+      <div class="time-card bg-white rounded-xl shadow-sm overflow-hidden">
+        <div class="px-5 py-4 bg-gray-50 border-b border-gray-100">
+          <h3 class="font-semibold text-gray-800">
+            <i class="fas fa-arrow-right text-cyan-500 mr-2"></i>时间戳 → 日期时间
+          </h3>
+        </div>
+        <div class="p-5">
+          <div class="mb-4">
+            <label class="block text-sm text-gray-600 mb-2">输入时间戳</label>
+            <div class="flex gap-2">
+              <input type="text" id="timestampInput" placeholder="例如: 1710000000000"
+                class="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 outline-none font-mono"
+                oninput="convertTimestamp()">
+              <button onclick="useCurrentTimestamp()" class="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm text-gray-600 transition-colors" title="使用当前时间戳">
+                <i class="fas fa-clock"></i>
+              </button>
+            </div>
+            <div class="flex gap-4 mt-2">
+              <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input type="radio" name="tsUnit" value="ms" checked onchange="convertTimestamp()"> 毫秒
+              </label>
+              <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input type="radio" name="tsUnit" value="s" onchange="convertTimestamp()"> 秒
+              </label>
+            </div>
+          </div>
+          
+          <div id="timestampResult" class="space-y-2 hidden">
+            <div class="time-row flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span class="text-sm text-gray-600">本地时间</span>
+              <div class="flex items-center gap-2">
+                <span id="localTime" class="font-mono font-medium text-gray-900"></span>
+                <button onclick="copyText(document.getElementById('localTime').textContent)" class="copy-btn p-1 text-gray-400 hover:text-cyan-600">
+                  <i class="fas fa-copy"></i>
+                </button>
+              </div>
+            </div>
+            <div class="time-row flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span class="text-sm text-gray-600">UTC 时间</span>
+              <div class="flex items-center gap-2">
+                <span id="utcTime" class="font-mono font-medium text-gray-900"></span>
+                <button onclick="copyText(document.getElementById('utcTime').textContent)" class="copy-btn p-1 text-gray-400 hover:text-cyan-600">
+                  <i class="fas fa-copy"></i>
+                </button>
+              </div>
+            </div>
+            <div class="time-row flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span class="text-sm text-gray-600">ISO 格式</span>
+              <div class="flex items-center gap-2">
+                <span id="isoTime" class="font-mono font-medium text-gray-900 text-sm"></span>
+                <button onclick="copyText(document.getElementById('isoTime').textContent)" class="copy-btn p-1 text-gray-400 hover:text-cyan-600">
+                  <i class="fas fa-copy"></i>
+                </button>
+              </div>
+            </div>
+            <div class="time-row flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span class="text-sm text-gray-600">相对时间</span>
+              <span id="relativeTime" class="font-medium text-cyan-600"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 日期转时间戳 -->
+      <div class="time-card bg-white rounded-xl shadow-sm overflow-hidden">
+        <div class="px-5 py-4 bg-gray-50 border-b border-gray-100">
+          <h3 class="font-semibold text-gray-800">
+            <i class="fas fa-arrow-left text-blue-500 mr-2"></i>日期时间 → 时间戳
+          </h3>
+        </div>
+        <div class="p-5">
+          <div class="mb-4">
+            <label class="block text-sm text-gray-600 mb-2">输入日期时间</label>
+            <input type="datetime-local" id="datetimeInput" step="1"
+              class="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              onchange="convertDatetime()">
+          </div>
+          <div class="mb-4">
+            <label class="block text-sm text-gray-600 mb-2">或输入字符串</label>
+            <input type="text" id="datetimeStringInput" placeholder="例如: 2024-03-10 12:00:00"
+              class="w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              oninput="convertDatetimeString()">
+          </div>
+          
+          <div id="datetimeResult" class="space-y-2 hidden">
+            <div class="time-row flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span class="text-sm text-gray-600">毫秒时间戳</span>
+              <div class="flex items-center gap-2">
+                <span id="msTimestamp" class="font-mono font-bold text-blue-600"></span>
+                <button onclick="copyText(document.getElementById('msTimestamp').textContent)" class="copy-btn p-1 text-gray-400 hover:text-blue-600">
+                  <i class="fas fa-copy"></i>
+                </button>
+              </div>
+            </div>
+            <div class="time-row flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span class="text-sm text-gray-600">秒时间戳</span>
+              <div class="flex items-center gap-2">
+                <span id="sTimestamp" class="font-mono font-bold text-blue-600"></span>
+                <button onclick="copyText(document.getElementById('sTimestamp').textContent)" class="copy-btn p-1 text-gray-400 hover:text-blue-600">
+                  <i class="fas fa-copy"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 常用时间 -->
+    <div class="mt-6 bg-white rounded-xl shadow-sm p-5">
+      <h3 class="font-semibold text-gray-800 mb-4">
+        <i class="fas fa-bookmark text-yellow-500 mr-2"></i>常用时间点
+      </h3>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <button onclick="setQuickTime('today-start')" class="p-3 bg-gray-50 hover:bg-cyan-50 rounded-lg transition-colors text-left">
+          <span class="block text-sm font-medium text-gray-800">今日开始</span>
+          <span class="block text-xs text-gray-500 mt-1">00:00:00</span>
+        </button>
+        <button onclick="setQuickTime('today-end')" class="p-3 bg-gray-50 hover:bg-cyan-50 rounded-lg transition-colors text-left">
+          <span class="block text-sm font-medium text-gray-800">今日结束</span>
+          <span class="block text-xs text-gray-500 mt-1">23:59:59</span>
+        </button>
+        <button onclick="setQuickTime('week-start')" class="p-3 bg-gray-50 hover:bg-cyan-50 rounded-lg transition-colors text-left">
+          <span class="block text-sm font-medium text-gray-800">本周开始</span>
+          <span class="block text-xs text-gray-500 mt-1">周一 00:00</span>
+        </button>
+        <button onclick="setQuickTime('month-start')" class="p-3 bg-gray-50 hover:bg-cyan-50 rounded-lg transition-colors text-left">
+          <span class="block text-sm font-medium text-gray-800">本月开始</span>
+          <span class="block text-xs text-gray-500 mt-1">1日 00:00</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 时间计算 -->
+    <div class="mt-6 bg-white rounded-xl shadow-sm p-5">
+      <h3 class="font-semibold text-gray-800 mb-4">
+        <i class="fas fa-calculator text-green-500 mr-2"></i>时间计算
+      </h3>
+      <div class="flex flex-wrap gap-3 items-center">
+        <input type="text" id="calcTimestamp" placeholder="输入时间戳"
+          class="flex-1 min-w-[150px] px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none font-mono">
+        <select id="calcOp" class="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none">
+          <option value="+">+</option>
+          <option value="-">-</option>
+        </select>
+        <input type="number" id="calcValue" placeholder="数值" value="1"
+          class="w-24 px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none">
+        <select id="calcUnit" class="px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none">
+          <option value="1000">秒</option>
+          <option value="60000">分钟</option>
+          <option value="3600000">小时</option>
+          <option value="86400000" selected>天</option>
+          <option value="604800000">周</option>
+        </select>
+        <button onclick="calculateTime()" class="px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+          计算
+        </button>
+      </div>
+      <div id="calcResult" class="mt-4 p-4 bg-green-50 rounded-lg hidden">
+        <div class="flex items-center justify-between">
+          <span class="text-green-800">计算结果：</span>
+          <div class="flex items-center gap-3">
+            <span id="calcResultTs" class="font-mono font-bold text-green-600"></span>
+            <span class="text-gray-400">→</span>
+            <span id="calcResultDate" class="font-medium text-gray-700"></span>
+            <button onclick="copyText(document.getElementById('calcResultTs').textContent)" class="p-1 text-gray-400 hover:text-green-600">
+              <i class="fas fa-copy"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 更新当前时间
+    function updateCurrentTime() {
+      const now = new Date();
+      document.getElementById('currentTime').textContent = now.toLocaleTimeString('zh-CN', { hour12: false });
+      document.getElementById('currentDate').textContent = now.toLocaleDateString('zh-CN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      document.querySelector('#currentTimestamp p:last-child').textContent = now.getTime();
+    }
+
+    // 初始化
+    updateCurrentTime();
+    setInterval(updateCurrentTime, 1000);
+
+    // 设置默认日期时间
+    const now = new Date();
+    document.getElementById('datetimeInput').value = formatDatetimeLocal(now);
+
+    function formatDatetimeLocal(date) {
+      return date.getFullYear() + '-' +
+        String(date.getMonth() + 1).padStart(2, '0') + '-' +
+        String(date.getDate()).padStart(2, '0') + 'T' +
+        String(date.getHours()).padStart(2, '0') + ':' +
+        String(date.getMinutes()).padStart(2, '0') + ':' +
+        String(date.getSeconds()).padStart(2, '0');
+    }
+
+    // 时间戳转日期
+    function convertTimestamp() {
+      const input = document.getElementById('timestampInput').value.trim();
+      if (!input) {
+        document.getElementById('timestampResult').classList.add('hidden');
+        return;
+      }
+
+      const unit = document.querySelector('input[name="tsUnit"]:checked').value;
+      let ts = parseInt(input);
+      if (isNaN(ts)) {
+        showToast('请输入有效的数字', 'error');
+        return;
+      }
+
+      if (unit === 's') ts *= 1000;
+
+      const date = new Date(ts);
+      if (isNaN(date.getTime())) {
+        showToast('无效的时间戳', 'error');
+        return;
+      }
+
+      document.getElementById('localTime').textContent = date.toLocaleString('zh-CN');
+      document.getElementById('utcTime').textContent = date.toUTCString();
+      document.getElementById('isoTime').textContent = date.toISOString();
+      document.getElementById('relativeTime').textContent = getRelativeTime(date);
+      document.getElementById('timestampResult').classList.remove('hidden');
+    }
+
+    // 日期转时间戳
+    function convertDatetime() {
+      const input = document.getElementById('datetimeInput').value;
+      if (!input) {
+        document.getElementById('datetimeResult').classList.add('hidden');
+        return;
+      }
+
+      const date = new Date(input);
+      showDatetimeResult(date);
+    }
+
+    // 字符串转时间戳
+    function convertDatetimeString() {
+      const input = document.getElementById('datetimeStringInput').value.trim();
+      if (!input) {
+        document.getElementById('datetimeResult').classList.add('hidden');
+        return;
+      }
+
+      const date = new Date(input.replace(/-/g, '/'));
+      if (isNaN(date.getTime())) {
+        document.getElementById('datetimeResult').classList.add('hidden');
+        return;
+      }
+
+      showDatetimeResult(date);
+    }
+
+    function showDatetimeResult(date) {
+      if (isNaN(date.getTime())) {
+        showToast('无效的日期时间', 'error');
+        return;
+      }
+
+      const ms = date.getTime();
+      document.getElementById('msTimestamp').textContent = ms;
+      document.getElementById('sTimestamp').textContent = Math.floor(ms / 1000);
+      document.getElementById('datetimeResult').classList.remove('hidden');
+    }
+
+    // 使用当前时间戳
+    function useCurrentTimestamp() {
+      document.getElementById('timestampInput').value = Date.now();
+      convertTimestamp();
+    }
+
+    // 快速时间
+    function setQuickTime(type) {
+      const now = new Date();
+      let date;
+
+      switch (type) {
+        case 'today-start':
+          date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+          break;
+        case 'today-end':
+          date = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+          break;
+        case 'week-start':
+          const day = now.getDay() || 7;
+          date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - day + 1, 0, 0, 0);
+          break;
+        case 'month-start':
+          date = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+          break;
+      }
+
+      document.getElementById('datetimeInput').value = formatDatetimeLocal(date);
+      convertDatetime();
+    }
+
+    // 时间计算
+    function calculateTime() {
+      let ts = document.getElementById('calcTimestamp').value.trim();
+      if (!ts) ts = Date.now().toString();
+      
+      const op = document.getElementById('calcOp').value;
+      const value = parseInt(document.getElementById('calcValue').value) || 0;
+      const unit = parseInt(document.getElementById('calcUnit').value);
+
+      let result = parseInt(ts);
+      if (isNaN(result)) {
+        showToast('请输入有效的时间戳', 'error');
+        return;
+      }
+
+      if (op === '+') {
+        result += value * unit;
+      } else {
+        result -= value * unit;
+      }
+
+      document.getElementById('calcResultTs').textContent = result;
+      document.getElementById('calcResultDate').textContent = new Date(result).toLocaleString('zh-CN');
+      document.getElementById('calcResult').classList.remove('hidden');
+    }
+
+    // 相对时间
+    function getRelativeTime(date) {
+      const now = new Date();
+      const diff = now - date;
+      const absDiff = Math.abs(diff);
+      const future = diff < 0;
+      const prefix = future ? '后' : '前';
+
+      if (absDiff < 60000) return '刚刚';
+      if (absDiff < 3600000) return Math.floor(absDiff / 60000) + ' 分钟' + prefix;
+      if (absDiff < 86400000) return Math.floor(absDiff / 3600000) + ' 小时' + prefix;
+      if (absDiff < 2592000000) return Math.floor(absDiff / 86400000) + ' 天' + prefix;
+      if (absDiff < 31536000000) return Math.floor(absDiff / 2592000000) + ' 个月' + prefix;
+      return Math.floor(absDiff / 31536000000) + ' 年' + prefix;
+    }
+
+    // 复制文本
+    function copyText(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('已复制: ' + text, 'success');
+      }).catch(() => {
+        showToast('复制失败', 'error');
+      });
+    }
+
+    // Toast
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      const icons = { success: 'check-circle', error: 'exclamation-circle', info: 'info-circle' };
+      toast.innerHTML = `<i class="fas fa-${icons[type]} mr-2"></i>${message}`;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 2000);
+    }
+    
+    // 显示页面
+    document.body.classList.add('ready');
+  </script>
+</body>
+</html>

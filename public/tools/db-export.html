@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据库导出工具</title>
+  <script src="/assets/js/tailwind.js"></script>
+  <link rel="stylesheet" href="/assets/css/fontawesome.min.css">
+  <style>
+    body { opacity: 0; transition: opacity 0.1s; }
+    body.ready { opacity: 1; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    
+    .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+    .animate-spin { animation: spin 1s linear infinite; }
+    
+    .table-row-hover:hover { background-color: #f8fafc; }
+    
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .status-connected { background-color: #22c55e; box-shadow: 0 0 0 2px #dcfce7; }
+    .status-disconnected { background-color: #ef4444; box-shadow: 0 0 0 2px #fee2e2; }
+    .status-connecting { background-color: #f59e0b; box-shadow: 0 0 0 2px #fef3c7; }
+    
+    .custom-checkbox { accent-color: #3b82f6; cursor: pointer; }
+    
+    .mode-tag { font-size: 11px; padding: 2px 8px; border-radius: 12px; font-weight: 500; border: none; cursor: pointer; transition: all 0.2s; }
+    .mode-structure { background: #dbeafe; color: #1e40af; }
+    .mode-data { background: #dcfce7; color: #166534; }
+    .mode-none { background: #f1f5f9; color: #64748b; }
+    .mode-inactive { background: #f1f5f9; color: #94a3b8; }
+    
+    .connection-card { transition: all 0.2s; border: 2px solid transparent; }
+    .connection-card:hover { border-color: #3b82f6; transform: translateY(-2px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1); }
+    .connection-card.active { border-color: #3b82f6; background: #eff6ff; }
+    
+    .toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; font-weight: 500; z-index: 1000; animation: fadeIn 0.3s ease-out; }
+    .toast-success { background: #22c55e; }
+    .toast-error { background: #ef4444; }
+    .toast-info { background: #3b82f6; }
+    
+    .loading-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 9999; }
+    .loading-overlay.show { display: flex; }
+    .loading-spinner { width: 50px; height: 50px; border: 4px solid #fff; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+  </div>
+
+  <div id="app" class="max-w-7xl mx-auto p-6">
+    <!-- 头部 -->
+    <header class="mb-8">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white text-2xl">
+            <i class="fas fa-database"></i>
+          </div>
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">数据库导出工具</h1>
+            <p class="text-gray-500 text-sm">可视化数据库初始化语句导出</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          <button onclick="app.showHelp()" class="px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors">
+            <i class="fas fa-question-circle mr-2"></i>帮助
+          </button>
+          <button onclick="app.importConfig()" class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+            <i class="fas fa-upload mr-2"></i>导入配置
+          </button>
+          <button onclick="app.exportConfig()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            <i class="fas fa-download mr-2"></i>导出配置
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <div class="grid grid-cols-12 gap-6">
+      <!-- 左侧：连接管理 -->
+      <div class="col-span-4 space-y-6">
+        <!-- 连接配置 -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 class="font-semibold text-gray-900">
+              <i class="fas fa-plug text-blue-600 mr-2"></i>连接配置
+            </h2>
+            <span id="connStatus" class="status-dot status-disconnected"></span>
+          </div>
+          
+          <div class="p-5 space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1.5">数据库类型</label>
+              <select id="dbType" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                <option value="mysql">MySQL / MariaDB</option>
+                <option value="postgresql">PostgreSQL</option>
+                <option value="sqlite">SQLite</option>
+              </select>
+            </div>
+
+            <div class="grid grid-cols-3 gap-3">
+              <div class="col-span-2">
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">主机地址</label>
+                <input type="text" id="dbHost" placeholder="localhost" value="localhost"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">端口</label>
+                <input type="number" id="dbPort" placeholder="3306" value="3306"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1.5">用户名</label>
+              <input type="text" id="dbUser" placeholder="root"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1.5">密码</label>
+              <div class="relative">
+                <input type="password" id="dbPassword" placeholder="输入密码"
+                  class="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+                <button onclick="app.togglePassword()" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1.5">数据库名称</label>
+              <input type="text" id="dbName" placeholder="database_name"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all">
+            </div>
+
+            <div class="flex gap-3 pt-2">
+              <button onclick="app.testConnection()" id="btnTest" 
+                class="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium">
+                <i class="fas fa-bolt mr-2 text-yellow-500"></i>测试连接
+              </button>
+              <button onclick="app.saveConnection()" id="btnSave"
+                class="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium">
+                <i class="fas fa-save mr-2"></i>保存连接
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 已保存的连接 -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 class="font-semibold text-gray-900">
+              <i class="fas fa-history text-green-600 mr-2"></i>已保存的连接
+            </h2>
+            <div class="flex items-center gap-2">
+              <span id="savedCount" class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">0</span>
+              <button onclick="app.newConnection()" class="text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded transition-colors">
+                <i class="fas fa-plus mr-1"></i>新建
+              </button>
+            </div>
+          </div>
+          <div id="savedConnections" class="p-3 max-h-64 overflow-y-auto space-y-2">
+            <div class="text-center py-8 text-gray-400">
+              <i class="fas fa-inbox text-3xl mb-2"></i>
+              <p class="text-sm">暂无保存的连接</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧：表选择和导出配置 -->
+      <div class="col-span-8 space-y-6">
+        <!-- 数据库和表选择 -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 class="font-semibold text-gray-900">
+              <i class="fas fa-table text-purple-600 mr-2"></i>表选择
+            </h2>
+            <div class="flex items-center gap-3">
+              <button onclick="app.refreshMetadata()" id="btnRefresh"
+                class="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                <i class="fas fa-sync-alt mr-1"></i>刷新元数据
+              </button>
+              <div class="h-4 w-px bg-gray-300"></div>
+              <button onclick="app.selectAll('data')" class="px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors">
+                全选数据
+              </button>
+              <button onclick="app.selectAll('structure')" class="px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                全选结构
+              </button>
+              <button onclick="app.clearAll()" class="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                清空
+              </button>
+            </div>
+          </div>
+
+          <div id="tablesContainer" class="p-0">
+            <div class="text-center py-16 text-gray-400">
+              <i class="fas fa-database text-5xl mb-4 opacity-30"></i>
+              <p>请先配置并保存数据库连接</p>
+              <p class="text-sm mt-1">连接成功后可查看和选择表</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 导出选项 -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div class="px-5 py-4 border-b border-gray-100">
+            <h2 class="font-semibold text-gray-900">
+              <i class="fas fa-cog text-gray-600 mr-2"></i>导出选项
+            </h2>
+          </div>
+          <div class="p-5">
+            <div class="grid grid-cols-2 gap-6">
+              <div class="space-y-4">
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div class="flex items-center gap-3">
+                    <i class="fas fa-trash-alt text-red-500"></i>
+                    <div>
+                      <div class="font-medium text-gray-900">添加 DROP TABLE</div>
+                      <div class="text-xs text-gray-500">导出时包含删除表语句</div>
+                    </div>
+                  </div>
+                  <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="optDropTable" class="sr-only peer" checked>
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div class="flex items-center gap-3">
+                    <i class="fas fa-key text-orange-500"></i>
+                    <div>
+                      <div class="font-medium text-gray-900">禁用外键检查</div>
+                      <div class="text-xs text-gray-500">导入时自动禁用外键约束</div>
+                    </div>
+                  </div>
+                  <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="optForeignKey" class="sr-only peer" checked>
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+              </div>
+
+              <div class="space-y-4">
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div class="flex items-center gap-3">
+                    <i class="fas fa-list text-blue-500"></i>
+                    <div>
+                      <div class="font-medium text-gray-900">完整 INSERT</div>
+                      <div class="text-xs text-gray-500">包含列名的 INSERT 语句</div>
+                    </div>
+                  </div>
+                  <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="optCompleteInsert" class="sr-only peer" checked>
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div class="flex items-center gap-3">
+                    <i class="fas fa-compress-alt text-green-500"></i>
+                    <div>
+                      <div class="font-medium text-gray-900">扩展 INSERT</div>
+                      <div class="text-xs text-gray-500">多行合并的 INSERT 语句</div>
+                    </div>
+                  </div>
+                  <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="optExtendedInsert" class="sr-only peer" checked>
+                    <div class="w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 导出操作 -->
+        <div class="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl shadow-lg p-6 text-white">
+          <div class="flex items-center justify-between">
+            <div>
+              <h3 class="text-lg font-semibold mb-1">准备导出</h3>
+              <p class="text-blue-100 text-sm">
+                已选择 <span id="selectedStructure" class="font-bold text-white">0</span> 个仅结构表，
+                <span id="selectedData" class="font-bold text-white">0</span> 个含数据表
+              </p>
+            </div>
+            <button onclick="app.generateSQL()" id="btnGenerate"
+              class="px-8 py-3 bg-white text-blue-600 rounded-lg font-semibold hover:bg-blue-50 transition-colors shadow-md">
+              <i class="fas fa-file-export mr-2"></i>生成 SQL 文件
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SQL 预览模态框 -->
+    <div id="previewModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col m-4">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h3 class="text-lg font-semibold text-gray-900">
+            <i class="fas fa-code text-blue-600 mr-2"></i>SQL 预览
+          </h3>
+          <button onclick="app.closePreview()" class="text-gray-400 hover:text-gray-600">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+        <div class="flex-1 overflow-hidden">
+          <textarea id="sqlPreview" class="w-full h-full p-4 font-mono text-sm bg-gray-50 resize-none outline-none" readonly></textarea>
+        </div>
+        <div class="px-6 py-4 border-t border-gray-200 flex items-center justify-between bg-gray-50 rounded-b-xl">
+          <div class="text-sm text-gray-500">
+            <span id="sqlStats"></span>
+          </div>
+          <div class="flex gap-3">
+            <button onclick="app.copySQL()" class="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded-lg transition-colors">
+              <i class="fas fa-copy mr-2"></i>复制
+            </button>
+            <button onclick="app.downloadSQL()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+              <i class="fas fa-download mr-2"></i>下载文件
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 帮助模态框 -->
+    <div id="helpModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+      <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col m-4">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h3 class="text-lg font-semibold text-gray-900">使用帮助</h3>
+          <button onclick="app.closeHelp()" class="text-gray-400 hover:text-gray-600">
+            <i class="fas fa-times text-xl"></i>
+          </button>
+        </div>
+        <div class="p-6 overflow-y-auto">
+          <div class="space-y-4 text-gray-700">
+            <div>
+              <h4 class="font-semibold text-gray-900 mb-2">1. 配置数据库连接</h4>
+              <p class="text-sm">填写数据库连接信息，点击"保存连接"。支持 MySQL、PostgreSQL 和 SQLite。</p>
+            </div>
+            <div>
+              <h4 class="font-semibold text-gray-900 mb-2">2. 选择要导出的表</h4>
+              <p class="text-sm">连接成功后，系统会自动加载数据库中的所有表。为每个表选择导出模式：</p>
+              <ul class="text-sm mt-2 space-y-1 ml-4">
+                <li><span class="mode-tag mode-none">不导出</span> - 跳过此表</li>
+                <li><span class="mode-tag mode-structure">仅结构</span> - 只导出 CREATE TABLE 语句</li>
+                <li><span class="mode-tag mode-data">结构+数据</span> - 导出表结构和 INSERT 数据</li>
+              </ul>
+            </div>
+            <div>
+              <h4 class="font-semibold text-gray-900 mb-2">3. 配置导出选项</h4>
+              <p class="text-sm">根据需要调整导出选项，如是否添加 DROP TABLE、是否禁用外键检查等。</p>
+            </div>
+            <div>
+              <h4 class="font-semibold text-gray-900 mb-2">4. 生成 SQL 文件</h4>
+              <p class="text-sm">点击"生成 SQL 文件"按钮，预览生成的 SQL 语句，确认无误后下载到本地。</p>
+            </div>
+            <div class="bg-blue-50 p-4 rounded-lg mt-4">
+              <p class="text-sm text-blue-800">
+                <i class="fas fa-info-circle mr-2"></i>
+                所有配置会自动保存到服务器，下次打开页面时会自动恢复。
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // API 基础地址
+    const API_BASE = '';
+
+    // 应用主类
+    class DBExportApp {
+      constructor() {
+        this.connections = [];
+        this.currentConnection = null;
+        this.tables = [];
+        this.tableConfigs = {}; // 当前连接的表配置
+        this.sqlContent = '';
+        
+        this.init();
+      }
+
+      async init() {
+        await this.loadConnections();
+        this.renderSavedConnections();
+        this.updateStats();
+      }
+
+      // 显示/隐藏加载
+      showLoading(show) {
+        document.getElementById('loadingOverlay').classList.toggle('show', show);
+      }
+
+      // API 请求封装
+      async api(url, options = {}) {
+        const response = await fetch(`${API_BASE}${url}`, {
+          headers: { 'Content-Type': 'application/json' },
+          ...options
+        });
+        const data = await response.json();
+        if (!data.success) {
+          throw new Error(data.message);
+        }
+        return data;
+      }
+
+      // 加载连接列表
+      async loadConnections() {
+        try {
+          const data = await this.api('/api/connections');
+          this.connections = data.data;
+        } catch (error) {
+          this.showToast('加载连接失败: ' + error.message, 'error');
+        }
+      }
+
+      // 获取连接表单数据
+      getConnectionFormData() {
+        return {
+          id: this.currentConnection?.id || null,
+          type: document.getElementById('dbType').value,
+          host: document.getElementById('dbHost').value,
+          port: parseInt(document.getElementById('dbPort').value) || 3306,
+          user: document.getElementById('dbUser').value,
+          password: document.getElementById('dbPassword').value,
+          database: document.getElementById('dbName').value
+        };
+      }
+
+      // 加载连接
+      async loadConnection(conn) {
+        // 获取完整连接信息（包含密码）
+        this.showLoading(true);
+        try {
+          const detail = await this.api(`/api/connections/${conn.id}/detail`);
+          const fullConn = detail.data;
+          
+          this.currentConnection = fullConn;
+          document.getElementById('dbType').value = fullConn.type;
+          document.getElementById('dbHost').value = fullConn.host;
+          document.getElementById('dbPort').value = fullConn.port;
+          document.getElementById('dbUser').value = fullConn.user;
+          document.getElementById('dbPassword').value = fullConn.password;
+          document.getElementById('dbName').value = fullConn.database;
+          
+          this.renderSavedConnections();
+          this.updateConnectionStatus('connected');
+          
+          // 加载该连接的表配置
+          await this.loadTableConfig();
+          
+          // 加载表列表
+          await this.loadTables();
+        } catch (error) {
+          this.showToast('加载连接失败: ' + error.message, 'error');
+        } finally {
+          this.showLoading(false);
+        }
+      }
+
+      // 测试连接
+      async testConnection() {
+        const conn = this.getConnectionFormData();
+        if (!conn.host || !conn.database) {
+          this.showToast('请填写完整的数据库信息', 'error');
+          return;
+        }
+
+        this.showLoading(true);
+        this.updateConnectionStatus('connecting');
+        
+        try {
+          await this.api('/api/connections/test', {
+            method: 'POST',
+            body: JSON.stringify(conn)
+          });
+          this.updateConnectionStatus('connected');
+          this.showToast('连接成功！', 'success');
+        } catch (error) {
+          this.updateConnectionStatus('disconnected');
+          this.showToast('连接失败: ' + error.message, 'error');
+        } finally {
+          this.showLoading(false);
+        }
+      }
+
+      // 保存连接
+      async saveConnection() {
+        const conn = this.getConnectionFormData();
+        if (!conn.host || !conn.database) {
+          this.showToast('请填写完整的数据库信息', 'error');
+          return;
+        }
+
+        this.showLoading(true);
+        try {
+          const data = await this.api('/api/connections', {
+            method: 'POST',
+            body: JSON.stringify(conn)
+          });
+          
+          // 保存返回的连接信息，但保留真实密码
+          this.currentConnection = { ...data.data, password: conn.password };
+          await this.loadConnections();
+          this.renderSavedConnections();
+          this.showToast('连接已保存', 'success');
+          
+          // 自动加载表
+          await this.loadTables();
+        } catch (error) {
+          this.showToast('保存失败: ' + error.message, 'error');
+        } finally {
+          this.showLoading(false);
+        }
+      }
+
+      // 删除连接
+      async deleteConnection(connId, event) {
+        event.stopPropagation();
+        if (!confirm('确定要删除这个连接吗？')) return;
+        
+        this.showLoading(true);
+        try {
+          await this.api(`/api/connections/${connId}`, { method: 'DELETE' });
+          
+          if (this.currentConnection?.id === connId) {
+            this.currentConnection = null;
+            this.clearForm();
+            this.tables = [];
+            this.tableConfigs = {};
+            this.renderTables();
+          }
+          
+          await this.loadConnections();
+          this.renderSavedConnections();
+          this.showToast('连接已删除', 'info');
+        } catch (error) {
+          this.showToast('删除失败: ' + error.message, 'error');
+        } finally {
+          this.showLoading(false);
+        }
+      }
+
+      // 清空表单
+      clearForm() {
+        document.getElementById('dbType').value = 'mysql';
+        document.getElementById('dbHost').value = 'localhost';
+        document.getElementById('dbPort').value = '3306';
+        document.getElementById('dbUser').value = '';
+        document.getElementById('dbPassword').value = '';
+        document.getElementById('dbName').value = '';
+        this.updateConnectionStatus('disconnected');
+      }
+
+      // 新建连接
+      newConnection() {
+        this.currentConnection = null;
+        this.tables = [];
+        this.tableConfigs = {};
+        this.clearForm();
+        this.renderTables();
+        this.renderSavedConnections();
+        this.updateStats();
+        this.showToast('已清空，可以创建新连接', 'info');
+      }
+
+      // 加载表列表
+      async loadTables() {
+        if (!this.currentConnection) return;
+        
+        this.showLoading(true);
+        try {
+          const data = await this.api(`/api/connections/${this.currentConnection.id}/tables`);
+          this.tables = data.data;
+          
+          // 初始化新表的配置为 'none'
+          this.tables.forEach(table => {
+            if (!this.tableConfigs[table.name]) {
+              this.tableConfigs[table.name] = 'none';
+            }
+          });
+          
+          this.renderTables();
+          this.showToast(`已加载 ${this.tables.length} 个表`, 'success');
+        } catch (error) {
+          this.showToast('加载表失败: ' + error.message, 'error');
+        } finally {
+          this.showLoading(false);
+        }
+      }
+
+      // 刷新元数据
+      async refreshMetadata() {
+        if (!this.currentConnection) {
+          this.showToast('请先保存连接', 'error');
+          return;
+        }
+        await this.loadTables();
+      }
+
+      // 加载表配置
+      async loadTableConfig() {
+        if (!this.currentConnection) return;
+        
+        try {
+          const data = await this.api(`/api/connections/${this.currentConnection.id}/config`);
+          this.tableConfigs = data.data || {};
+        } catch (error) {
+          this.tableConfigs = {};
+        }
+      }
+
+      // 保存表配置
+      async saveTableConfig() {
+        if (!this.currentConnection) return;
+        
+        try {
+          await this.api(`/api/connections/${this.currentConnection.id}/config`, {
+            method: 'POST',
+            body: JSON.stringify(this.tableConfigs)
+          });
+        } catch (error) {
+          console.error('保存配置失败:', error);
+        }
+      }
+
+      // 渲染表列表
+      renderTables() {
+        const container = document.getElementById('tablesContainer');
+        
+        if (this.tables.length === 0) {
+          container.innerHTML = `
+            <div class="text-center py-16 text-gray-400">
+              <i class="fas fa-database text-5xl mb-4 opacity-30"></i>
+              <p>请先配置并保存数据库连接</p>
+              <p class="text-sm mt-1">连接成功后可查看和选择表</p>
+            </div>
+          `;
+          return;
+        }
+
+        // 转义表名中的特殊字符，防止 XSS 和 JS 注入
+        const escapeTableName = (name) => name.replace(/[\\']/g, '\\$&').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+        const html = `
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider w-12">
+                    <input type="checkbox" class="custom-checkbox" onchange="app.toggleSelectAll(this)">
+                  </th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">表名</th>
+                  <th class="px-4 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">注释</th>
+                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">记录数</th>
+                  <th class="px-4 py-3 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider">大小</th>
+                  <th class="px-4 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">导出模式</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                ${this.tables.map((table, index) => {
+                  const mode = this.tableConfigs[table.name] || 'none';
+                  const safeName = escapeTableName(table.name);
+                  return `
+                    <tr class="table-row-hover transition-colors animate-fade-in" style="animation-delay: ${index * 30}ms">
+                      <td class="px-4 py-3">
+                        <input type="checkbox" class="custom-checkbox" data-table="${safeName}" 
+                          ${mode !== 'none' ? 'checked' : ''} onchange="app.toggleTable('${safeName}')">
+                      </td>
+                      <td class="px-4 py-3">
+                        <div class="flex items-center gap-2">
+                          <i class="fas fa-table text-gray-400 text-sm"></i>
+                          <span class="font-medium text-gray-900">${safeName}</span>
+                        </div>
+                      </td>
+                      <td class="px-4 py-3 text-sm text-gray-500">${(table.comment || '-').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</td>
+                      <td class="px-4 py-3 text-right text-sm text-gray-600">${(table.rows || 0).toLocaleString()}</td>
+                      <td class="px-4 py-3 text-right text-sm text-gray-600">${table.size || '-'}</td>
+                      <td class="px-4 py-3">
+                        <div class="flex items-center justify-center gap-2">
+                          <button onclick="app.setTableMode('${safeName}', 'none')" 
+                            class="mode-tag ${mode === 'none' ? 'mode-none' : 'mode-inactive'}">不导出</button>
+                          <button onclick="app.setTableMode('${safeName}', 'structure')" 
+                            class="mode-tag ${mode === 'structure' ? 'mode-structure' : 'mode-inactive'}">仅结构</button>
+                          <button onclick="app.setTableMode('${safeName}', 'data')" 
+                            class="mode-tag ${mode === 'data' ? 'mode-data' : 'mode-inactive'}">结构+数据</button>
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+        
+        container.innerHTML = html;
+        this.updateStats();
+      }
+
+      // 设置表模式
+      async setTableMode(tableName, mode) {
+        this.tableConfigs[tableName] = mode;
+        await this.saveTableConfig();
+        this.renderTables();
+        this.updateStats();
+      }
+
+      // 切换表选择
+      async toggleTable(tableName) {
+        const currentMode = this.tableConfigs[tableName] || 'none';
+        const newMode = currentMode === 'none' ? 'data' : 'none';
+        await this.setTableMode(tableName, newMode);
+      }
+
+      // 全选/取消全选
+      async toggleSelectAll(checkbox) {
+        const mode = checkbox.checked ? 'data' : 'none';
+        this.tables.forEach(table => {
+          this.tableConfigs[table.name] = mode;
+        });
+        await this.saveTableConfig();
+        this.renderTables();
+        this.updateStats();
+      }
+
+      // 全选指定模式
+      async selectAll(mode) {
+        if (!this.currentConnection) {
+          this.showToast('请先保存连接', 'error');
+          return;
+        }
+        this.tables.forEach(table => {
+          this.tableConfigs[table.name] = mode;
+        });
+        await this.saveTableConfig();
+        this.renderTables();
+        this.updateStats();
+        this.showToast(`已全选为${mode === 'data' ? '结构+数据' : '仅结构'}`, 'success');
+      }
+
+      // 清空选择
+      async clearAll() {
+        if (!this.currentConnection) return;
+        this.tables.forEach(table => {
+          this.tableConfigs[table.name] = 'none';
+        });
+        await this.saveTableConfig();
+        this.renderTables();
+        this.updateStats();
+        this.showToast('已清空选择', 'info');
+      }
+
+      // 更新统计（只统计当前存在的表）
+      updateStats() {
+        let structureCount = 0;
+        let dataCount = 0;
+        
+        // 只统计当前表列表中存在的表
+        const tableNames = new Set(this.tables.map(t => t.name));
+        Object.entries(this.tableConfigs).forEach(([tableName, mode]) => {
+          if (!tableNames.has(tableName)) return; // 跳过不存在的表
+          if (mode === 'structure') structureCount++;
+          if (mode === 'data') dataCount++;
+        });
+        
+        document.getElementById('selectedStructure').textContent = structureCount;
+        document.getElementById('selectedData').textContent = dataCount;
+      }
+
+      // 更新连接状态
+      updateConnectionStatus(status) {
+        const dot = document.getElementById('connStatus');
+        dot.className = `status-dot status-${status}`;
+      }
+
+      // 渲染已保存的连接
+      renderSavedConnections() {
+        const container = document.getElementById('savedConnections');
+        document.getElementById('savedCount').textContent = this.connections.length;
+        
+        if (this.connections.length === 0) {
+          container.innerHTML = `
+            <div class="text-center py-8 text-gray-400">
+              <i class="fas fa-inbox text-3xl mb-2"></i>
+              <p class="text-sm">暂无保存的连接</p>
+            </div>
+          `;
+          return;
+        }
+
+        container.innerHTML = this.connections.map(conn => {
+          const safeId = (conn.id || '').replace(/'/g, "\\'");
+          return `
+          <div class="connection-card p-3 rounded-lg cursor-pointer ${this.currentConnection?.id === conn.id ? 'active' : 'bg-gray-50 hover:bg-gray-100'}"
+            onclick="app.loadConnectionById('${safeId}')">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-lg bg-white flex items-center justify-center text-lg">
+                  <i class="fas fa-database ${this.currentConnection?.id === conn.id ? 'text-blue-600' : 'text-gray-400'}"></i>
+                </div>
+                <div>
+                  <div class="font-medium text-gray-900 text-sm">${conn.database || '未命名'}</div>
+                  <div class="text-xs text-gray-500">${conn.host || 'localhost'}:${conn.port || '3306'}</div>
+                </div>
+              </div>
+              <button onclick="app.deleteConnection('${safeId}', event)" 
+                class="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                <i class="fas fa-trash-alt"></i>
+              </button>
+            </div>
+          </div>
+        `}).join('');
+      }
+
+      // 通过ID加载连接
+      async loadConnectionById(id) {
+        const conn = this.connections.find(c => c.id === id);
+        if (conn) {
+          await this.loadConnection(conn);
+        } else {
+          this.showToast('未找到连接: ' + id, 'error');
+        }
+      }
+
+      // 工具函数
+      togglePassword() {
+        const input = document.getElementById('dbPassword');
+        const icon = event.currentTarget.querySelector('i');
+        if (input.type === 'password') {
+          input.type = 'text';
+          icon.className = 'fas fa-eye-slash';
+        } else {
+          input.type = 'password';
+          icon.className = 'fas fa-eye';
+        }
+      }
+
+      // 生成 SQL
+      async generateSQL() {
+        if (!this.currentConnection) {
+          this.showToast('请先保存连接', 'error');
+          return;
+        }
+
+        const structureTables = [];
+        const dataTables = [];
+
+        // 只处理当前存在的表
+        const tableNames = new Set(this.tables.map(t => t.name));
+        Object.entries(this.tableConfigs).forEach(([table, mode]) => {
+          if (!tableNames.has(table)) return; // 跳过不存在的表
+          if (mode === 'structure') structureTables.push(table);
+          if (mode === 'data') dataTables.push(table);
+        });
+
+        if (structureTables.length === 0 && dataTables.length === 0) {
+          this.showToast('请至少选择一个表', 'error');
+          return;
+        }
+
+        const options = {
+          addDropTable: document.getElementById('optDropTable').checked,
+          disableForeignKeyChecks: document.getElementById('optForeignKey').checked,
+          completeInsert: document.getElementById('optCompleteInsert').checked,
+          extendedInsert: document.getElementById('optExtendedInsert').checked
+        };
+
+        // 只发送当前存在的表的配置
+        const filteredTableConfigs = {};
+        Object.entries(this.tableConfigs).forEach(([table, mode]) => {
+          if (tableNames.has(table) && mode !== 'none') {
+            filteredTableConfigs[table] = mode;
+          }
+        });
+
+        this.showLoading(true);
+        try {
+          const data = await this.api(`/api/connections/${this.currentConnection.id}/export`, {
+            method: 'POST',
+            body: JSON.stringify({
+              tableConfigs: filteredTableConfigs,
+              options
+            })
+          });
+          
+          this.sqlContent = data.data;
+          this.showPreview(data.data);
+        } catch (error) {
+          this.showToast('生成 SQL 失败: ' + error.message, 'error');
+        } finally {
+          this.showLoading(false);
+        }
+      }
+
+      showPreview(sql) {
+        document.getElementById('sqlPreview').value = sql;
+        document.getElementById('sqlStats').textContent = `共 ${sql.split('\n').length} 行，${(sql.length / 1024).toFixed(2)} KB`;
+        document.getElementById('previewModal').classList.remove('hidden');
+        document.getElementById('previewModal').classList.add('flex');
+      }
+
+      closePreview() {
+        document.getElementById('previewModal').classList.add('hidden');
+        document.getElementById('previewModal').classList.remove('flex');
+      }
+
+      copySQL() {
+        const sql = document.getElementById('sqlPreview');
+        sql.select();
+        document.execCommand('copy');
+        this.showToast('已复制到剪贴板', 'success');
+      }
+
+      downloadSQL() {
+        const sql = document.getElementById('sqlPreview').value;
+        const blob = new Blob([sql], { type: 'text/sql' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const dbName = this.currentConnection?.database || 'database';
+        a.download = `${dbName}_init_${new Date().toISOString().slice(0, 10)}.sql`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.showToast('文件已下载', 'success');
+      }
+
+      async exportConfig() {
+        // 获取所有连接的完整信息（包含明文密码）
+        const connectionsWithPasswords = [];
+        for (const conn of this.connections) {
+          try {
+            const detail = await this.api(`/api/connections/${conn.id}/detail`);
+            const configData = await this.api(`/api/connections/${conn.id}/config`);
+            connectionsWithPasswords.push({
+              ...detail.data,
+              tableConfigs: configData.data || {}
+            });
+          } catch (err) {
+            console.error('获取连接详情失败:', err);
+          }
+        }
+
+        const config = {
+          version: '1.0',
+          connections: connectionsWithPasswords,
+          exportDate: new Date().toISOString()
+        };
+        
+        const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `db-export-config-${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.showToast('配置已导出（含密码和表配置）', 'success');
+      }
+
+      // 导入配置
+      importConfig() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+          
+          try {
+            const text = await file.text();
+            const config = JSON.parse(text);
+            
+            if (!config.connections || !Array.isArray(config.connections)) {
+              throw new Error('无效的配置文件格式');
+            }
+            
+            this.showLoading(true);
+            let imported = 0;
+            let failed = 0;
+            
+            for (const conn of config.connections) {
+              try {
+                // 保存连接（不带 id，让后端生成新 id）
+                const { id, tableConfigs, savedAt, ...connData } = conn;
+                
+                const result = await this.api('/api/connections', {
+                  method: 'POST',
+                  body: JSON.stringify(connData)
+                });
+                
+                // 如果有表配置，也保存
+                if (tableConfigs && Object.keys(tableConfigs).length > 0) {
+                  await this.api(`/api/connections/${result.data.id}/config`, {
+                    method: 'POST',
+                    body: JSON.stringify(tableConfigs)
+                  });
+                }
+                
+                imported++;
+              } catch (err) {
+                console.error('导入连接失败:', err);
+                failed++;
+              }
+            }
+            
+            await this.loadConnections();
+            this.renderSavedConnections();
+            this.showToast(`导入完成：成功 ${imported} 个，失败 ${failed} 个`, imported > 0 ? 'success' : 'error');
+          } catch (err) {
+            this.showToast('导入失败: ' + err.message, 'error');
+          } finally {
+            this.showLoading(false);
+          }
+        };
+        input.click();
+      }
+
+      showHelp() {
+        document.getElementById('helpModal').classList.remove('hidden');
+        document.getElementById('helpModal').classList.add('flex');
+      }
+
+      closeHelp() {
+        document.getElementById('helpModal').classList.add('hidden');
+        document.getElementById('helpModal').classList.remove('flex');
+      }
+
+      showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        
+        const icons = {
+          success: 'fa-check-circle',
+          error: 'fa-exclamation-circle',
+          info: 'fa-info-circle'
+        };
+        
+        toast.innerHTML = `<i class="fas ${icons[type]} mr-2"></i>${message}`;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+          toast.style.opacity = '0';
+          toast.style.transform = 'translateY(-20px)';
+          setTimeout(() => toast.remove(), 300);
+        }, 3000);
+      }
+    }
+
+    // 初始化应用
+    const app = new DBExportApp();
+
+    // 点击模态框外部关闭
+    document.getElementById('previewModal').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) app.closePreview();
+    });
+    document.getElementById('helpModal').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) app.closeHelp();
+    });
+    
+    // 显示页面
+    document.body.classList.add('ready');
+  </script>
+</body>
+</html>

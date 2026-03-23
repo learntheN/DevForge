@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>笔记本</title>
+  <script src="/assets/js/tailwind.js"></script>
+  <script src="/assets/js/marked.min.js"></script>
+  <link rel="stylesheet" href="/assets/css/fontawesome.min.css">
+  <style>
+    body { opacity: 0; transition: opacity 0.1s; }
+    body.ready { opacity: 1; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; font-weight: 500; z-index: 1000; animation: fadeIn 0.3s ease-out; }
+    .toast-success { background: #22c55e; }
+    .toast-error { background: #ef4444; }
+    .toast-info { background: #3b82f6; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    .note-item { transition: all 0.2s; border-left: 3px solid transparent; }
+    .note-item:hover { background-color: #f8fafc; }
+    .note-item.active { background-color: #eff6ff; border-left-color: #3b82f6; }
+    .loading-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 9999; }
+    .loading-overlay.show { display: flex; }
+    .loading-spinner { width: 40px; height: 40px; border: 3px solid #fff; border-top-color: #3b82f6; border-radius: 50%; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    /* Markdown 渲染样式 */
+    .markdown-preview { line-height: 1.8; color: #374151; }
+    .markdown-preview h1 { font-size: 1.875rem; font-weight: 700; margin: 1rem 0 0.5rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; }
+    .markdown-preview h2 { font-size: 1.5rem; font-weight: 600; margin: 1rem 0 0.5rem; }
+    .markdown-preview h3 { font-size: 1.25rem; font-weight: 600; margin: 0.75rem 0 0.5rem; }
+    .markdown-preview p { margin: 0.5rem 0; }
+    .markdown-preview ul, .markdown-preview ol { margin: 0.5rem 0; padding-left: 1.5rem; }
+    .markdown-preview li { margin: 0.25rem 0; }
+    .markdown-preview code { background: #f3f4f6; padding: 0.125rem 0.375rem; border-radius: 0.25rem; font-family: monospace; font-size: 0.875rem; }
+    .markdown-preview pre { background: #1f2937; color: #e5e7eb; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; margin: 0.75rem 0; }
+    .markdown-preview pre code { background: transparent; padding: 0; color: inherit; }
+    .markdown-preview blockquote { border-left: 4px solid #9333ea; background: #f5f3ff; padding: 0.75rem 1rem; margin: 0.75rem 0; }
+    .markdown-preview a { color: #2563eb; text-decoration: underline; }
+    .markdown-preview table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; }
+    .markdown-preview th, .markdown-preview td { border: 1px solid #e5e7eb; padding: 0.5rem; text-align: left; }
+    .markdown-preview th { background: #f9fafb; font-weight: 600; }
+    .markdown-preview hr { border: 0; border-top: 1px solid #e5e7eb; margin: 1rem 0; }
+    .markdown-preview img { max-width: 100%; border-radius: 0.5rem; }
+    .tab-btn { padding: 0.5rem 1rem; font-size: 0.875rem; border-radius: 0.5rem 0.5rem 0 0; transition: all 0.2s; }
+    .tab-btn.active { background: white; color: #7c3aed; font-weight: 500; }
+    .tab-btn:not(.active) { background: #e5e7eb; color: #6b7280; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+  </div>
+
+  <div class="flex h-screen">
+    <!-- 左侧：笔记列表 -->
+    <div class="w-80 bg-white border-r border-gray-200 flex flex-col">
+      <!-- 头部 -->
+      <div class="p-4 border-b border-gray-100">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center gap-2">
+            <div class="w-8 h-8 bg-purple-600 rounded-lg flex items-center justify-center text-white">
+              <i class="fas fa-book"></i>
+            </div>
+            <h1 class="text-lg font-bold text-gray-900">笔记本</h1>
+          </div>
+          <button onclick="createNote()" class="w-8 h-8 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+            <i class="fas fa-plus"></i>
+          </button>
+        </div>
+        <!-- 搜索框 -->
+        <div class="relative">
+          <input type="text" id="searchInput" placeholder="搜索笔记..." 
+            oninput="filterNotes(this.value)"
+            class="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none">
+          <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+        </div>
+      </div>
+      
+      <!-- 笔记列表 -->
+      <div id="notesList" class="flex-1 overflow-y-auto">
+        <div class="text-center py-16 text-gray-400">
+          <i class="fas fa-sticky-note text-4xl mb-3 opacity-30"></i>
+          <p class="text-sm">暂无笔记</p>
+          <p class="text-xs mt-1">点击右上角 + 创建新笔记</p>
+        </div>
+      </div>
+      
+      <!-- 底部统计 -->
+      <div class="p-3 border-t border-gray-100 text-xs text-gray-500 text-center">
+        共 <span id="notesCount">0</span> 条笔记
+      </div>
+    </div>
+
+    <!-- 右侧：编辑区 -->
+    <div class="flex-1 flex flex-col">
+      <div id="editorPanel" class="flex-1 flex flex-col hidden">
+        <!-- 编辑器头部 -->
+        <div class="px-6 py-4 border-b border-gray-200 bg-white">
+          <input type="text" id="noteTitle" placeholder="输入标题..." 
+            class="w-full text-xl font-semibold text-gray-900 border-none outline-none bg-transparent"
+            oninput="markDirty()">
+          <div class="flex items-center justify-between mt-2">
+            <div class="flex items-center gap-4 text-xs text-gray-500">
+              <span id="noteTime"></span>
+              <span id="noteStatus" class="text-green-600"></span>
+            </div>
+            <!-- 编辑/预览 切换 -->
+            <div class="flex">
+              <button onclick="switchTab('edit')" id="tabEdit" class="tab-btn active">
+                <i class="fas fa-edit mr-1"></i>编辑
+              </button>
+              <button onclick="switchTab('preview')" id="tabPreview" class="tab-btn">
+                <i class="fas fa-eye mr-1"></i>预览
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 编辑器内容 -->
+        <div class="flex-1 p-6 overflow-y-auto">
+          <textarea id="noteContent" placeholder="支持 Markdown 格式，开始写点什么..." 
+            class="w-full h-full resize-none border-none outline-none text-gray-700 leading-relaxed bg-transparent font-mono"
+            oninput="markDirty()"></textarea>
+          <div id="markdownPreview" class="markdown-preview hidden"></div>
+        </div>
+        
+        <!-- 编辑器底部 -->
+        <div class="px-6 py-3 border-t border-gray-200 bg-white flex items-center justify-between">
+          <div class="text-xs text-gray-500">
+            <span id="charCount">0</span> 字符 · 支持 Markdown
+          </div>
+          <div class="flex gap-2">
+            <button onclick="deleteCurrentNote()" class="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm">
+              <i class="fas fa-trash mr-1"></i>删除
+            </button>
+            <button onclick="saveNote()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm">
+              <i class="fas fa-save mr-1"></i>保存
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 空状态 -->
+      <div id="emptyState" class="flex-1 flex items-center justify-center">
+        <div class="text-center text-gray-400">
+          <i class="fas fa-file-alt text-6xl mb-4 opacity-30"></i>
+          <p class="text-lg">选择一个笔记或创建新笔记</p>
+          <button onclick="createNote()" class="mt-4 px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+            <i class="fas fa-plus mr-2"></i>新建笔记
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '';
+    let notes = [];
+    let currentNote = null;
+    let isDirty = false;
+    let autoSaveTimer = null;
+    let currentTab = 'edit';
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', () => {
+      loadNotes();
+      // 配置 marked
+      if (typeof marked !== 'undefined') {
+        marked.setOptions({
+          breaks: true,
+          gfm: true
+        });
+      }
+      // 显示页面
+      document.body.classList.add('ready');
+    });
+
+    // 切换编辑/预览
+    function switchTab(tab) {
+      currentTab = tab;
+      const textarea = document.getElementById('noteContent');
+      const preview = document.getElementById('markdownPreview');
+      const tabEdit = document.getElementById('tabEdit');
+      const tabPreview = document.getElementById('tabPreview');
+      
+      if (tab === 'edit') {
+        textarea.classList.remove('hidden');
+        preview.classList.add('hidden');
+        tabEdit.classList.add('active');
+        tabPreview.classList.remove('active');
+      } else {
+        textarea.classList.add('hidden');
+        preview.classList.remove('hidden');
+        tabEdit.classList.remove('active');
+        tabPreview.classList.add('active');
+        // 渲染 Markdown
+        const content = textarea.value;
+        preview.innerHTML = typeof marked !== 'undefined' ? marked.parse(content) : content.replace(/\n/g, '<br>');
+      }
+    }
+
+    // 显示加载
+    function showLoading(show) {
+      document.getElementById('loadingOverlay').classList.toggle('show', show);
+    }
+
+    // API 请求
+    async function api(url, options = {}) {
+      const response = await fetch(`${API_BASE}${url}`, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options
+      });
+      const data = await response.json();
+      if (!data.success) throw new Error(data.message);
+      return data;
+    }
+
+    // 加载笔记列表
+    async function loadNotes() {
+      showLoading(true);
+      try {
+        const data = await api('/api/notes');
+        notes = data.data || [];
+        renderNotesList();
+      } catch (err) {
+        showToast('加载失败: ' + err.message, 'error');
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // 渲染笔记列表
+    function renderNotesList(filter = '') {
+      const container = document.getElementById('notesList');
+      const filtered = filter 
+        ? notes.filter(n => n.title.toLowerCase().includes(filter.toLowerCase()) || 
+                          n.content.toLowerCase().includes(filter.toLowerCase()))
+        : notes;
+
+      document.getElementById('notesCount').textContent = notes.length;
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-16 text-gray-400">
+            <i class="fas fa-sticky-note text-4xl mb-3 opacity-30"></i>
+            <p class="text-sm">${filter ? '没有匹配的笔记' : '暂无笔记'}</p>
+            ${!filter ? '<p class="text-xs mt-1">点击右上角 + 创建新笔记</p>' : ''}
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(note => `
+        <div class="note-item px-4 py-3 cursor-pointer ${currentNote?.id === note.id ? 'active' : ''}"
+          onclick="selectNote('${note.id}')">
+          <div class="font-medium text-gray-900 text-sm truncate">${note.title || '无标题'}</div>
+          <div class="text-xs text-gray-500 mt-1 truncate">${note.content.substring(0, 50) || '无内容'}</div>
+          <div class="text-xs text-gray-400 mt-1">${formatTime(note.updatedAt)}</div>
+        </div>
+      `).join('');
+    }
+
+    // 搜索过滤
+    function filterNotes(keyword) {
+      renderNotesList(keyword);
+    }
+
+    // 选择笔记
+    async function selectNote(id) {
+      if (isDirty && !confirm('当前笔记未保存，是否放弃更改？')) return;
+      
+      currentNote = notes.find(n => n.id === id);
+      if (!currentNote) return;
+
+      document.getElementById('noteTitle').value = currentNote.title;
+      document.getElementById('noteContent').value = currentNote.content;
+      document.getElementById('noteTime').textContent = '更新于 ' + formatTime(currentNote.updatedAt);
+      document.getElementById('charCount').textContent = currentNote.content.length;
+      
+      document.getElementById('editorPanel').classList.remove('hidden');
+      document.getElementById('emptyState').classList.add('hidden');
+      
+      isDirty = false;
+      updateStatus('');
+      switchTab('edit'); // 切换到编辑模式
+      renderNotesList(document.getElementById('searchInput').value);
+    }
+
+    // 创建新笔记
+    async function createNote() {
+      if (isDirty && !confirm('当前笔记未保存，是否放弃更改？')) return;
+
+      showLoading(true);
+      try {
+        const data = await api('/api/notes', {
+          method: 'POST',
+          body: JSON.stringify({ title: '新笔记', content: '' })
+        });
+        
+        notes.unshift(data.data);
+        currentNote = data.data;
+        
+        document.getElementById('noteTitle').value = currentNote.title;
+        document.getElementById('noteContent').value = '';
+        document.getElementById('noteTime').textContent = '刚刚创建';
+        document.getElementById('charCount').textContent = 0;
+        
+        document.getElementById('editorPanel').classList.remove('hidden');
+        document.getElementById('emptyState').classList.add('hidden');
+        
+        isDirty = false;
+        renderNotesList();
+        
+        document.getElementById('noteTitle').focus();
+        document.getElementById('noteTitle').select();
+        
+        showToast('笔记已创建', 'success');
+      } catch (err) {
+        showToast('创建失败: ' + err.message, 'error');
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // 保存笔记
+    async function saveNote() {
+      if (!currentNote) return;
+
+      const title = document.getElementById('noteTitle').value.trim() || '无标题';
+      const content = document.getElementById('noteContent').value;
+
+      showLoading(true);
+      try {
+        const data = await api(`/api/notes/${currentNote.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ title, content })
+        });
+        
+        currentNote.title = title;
+        currentNote.content = content;
+        currentNote.updatedAt = data.data.updatedAt;
+        
+        const idx = notes.findIndex(n => n.id === currentNote.id);
+        if (idx !== -1) notes[idx] = currentNote;
+        
+        isDirty = false;
+        updateStatus('已保存');
+        document.getElementById('noteTime').textContent = '更新于 ' + formatTime(currentNote.updatedAt);
+        renderNotesList(document.getElementById('searchInput').value);
+        
+        showToast('保存成功', 'success');
+      } catch (err) {
+        showToast('保存失败: ' + err.message, 'error');
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // 删除当前笔记
+    async function deleteCurrentNote() {
+      if (!currentNote) return;
+      if (!confirm('确定要删除这条笔记吗？')) return;
+
+      showLoading(true);
+      try {
+        await api(`/api/notes/${currentNote.id}`, { method: 'DELETE' });
+        
+        notes = notes.filter(n => n.id !== currentNote.id);
+        currentNote = null;
+        isDirty = false;
+        
+        document.getElementById('editorPanel').classList.add('hidden');
+        document.getElementById('emptyState').classList.remove('hidden');
+        
+        renderNotesList();
+        showToast('笔记已删除', 'info');
+      } catch (err) {
+        showToast('删除失败: ' + err.message, 'error');
+      } finally {
+        showLoading(false);
+      }
+    }
+
+    // 标记为已修改
+    function markDirty() {
+      isDirty = true;
+      updateStatus('未保存');
+      document.getElementById('charCount').textContent = document.getElementById('noteContent').value.length;
+      
+      // 自动保存
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = setTimeout(() => {
+        if (isDirty && currentNote) saveNote();
+      }, 3000);
+    }
+
+    // 更新状态
+    function updateStatus(text) {
+      const el = document.getElementById('noteStatus');
+      el.textContent = text;
+      el.className = text === '未保存' ? 'text-orange-500' : 'text-green-600';
+    }
+
+    // 格式化时间
+    function formatTime(dateStr) {
+      if (!dateStr) return '';
+      const date = new Date(dateStr);
+      const now = new Date();
+      const diff = now - date;
+      
+      if (diff < 60000) return '刚刚';
+      if (diff < 3600000) return Math.floor(diff / 60000) + ' 分钟前';
+      if (diff < 86400000) return Math.floor(diff / 3600000) + ' 小时前';
+      if (diff < 604800000) return Math.floor(diff / 86400000) + ' 天前';
+      
+      return date.toLocaleDateString();
+    }
+
+    // Toast
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      const icons = { success: 'check-circle', error: 'exclamation-circle', info: 'info-circle' };
+      toast.innerHTML = `<i class="fas fa-${icons[type]} mr-2"></i>${message}`;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 2000);
+    }
+
+    // 页面关闭提示
+    window.addEventListener('beforeunload', (e) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+  </script>
+</body>
+</html>

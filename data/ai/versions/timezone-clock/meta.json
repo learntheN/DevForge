@@ -1,0 +1,13 @@
+{
+  "toolId": "timezone-clock",
+  "name": "世界时钟",
+  "currentVersion": 1,
+  "versions": [
+    {
+      "version": 1,
+      "file": "v1.html",
+      "adoptedAt": "2026-03-18T07:00:00.000Z",
+      "taskId": "migrated"
+    }
+  ]
+}

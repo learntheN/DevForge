@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>开发工具箱</title>
+  <script src="/assets/js/tailwind.js"></script>
+  <link rel="stylesheet" href="/assets/css/fontawesome.min.css">
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    
+    .sidebar { 
+      transition: width 0.3s ease;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .sidebar.collapsed { width: 64px; }
+    .sidebar.collapsed .nav-text { opacity: 0; width: 0; overflow: hidden; }
+    .sidebar.collapsed .logo-text { opacity: 0; width: 0; overflow: hidden; }
+    .sidebar.collapsed .nav-item { padding-left: 0; padding-right: 0; justify-content: center; }
+    .sidebar.collapsed .section-title { opacity: 0; height: 0; margin: 0; padding: 0; overflow: hidden; }
+    
+    .nav-item { 
+      transition: background-color 0.2s, border-color 0.2s; 
+      border-left: 3px solid transparent; 
+    }
+    .nav-item:hover { background-color: rgba(255, 255, 255, 0.1); }
+    .nav-item.active { background-color: rgba(255, 255, 255, 0.15); border-left-color: #fff; }
+    
+    .nav-text { 
+      transition: opacity 0.2s, width 0.2s;
+      white-space: nowrap;
+    }
+    .logo-text {
+      transition: opacity 0.2s, width 0.2s;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .section-title {
+      transition: opacity 0.2s, height 0.2s;
+    }
+    
+    .tool-frame { border: none; width: 100%; height: 100%; background: #f9fafb; }
+    
+    .frame-container { position: relative; width: 100%; height: 100%; }
+    .frame-container iframe { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+    
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+  </style>
+</head>
+<body class="bg-gray-100 h-screen overflow-hidden">
+  <div class="flex h-full">
+    <!-- 侧边栏 -->
+    <aside id="sidebar" class="sidebar w-64 bg-gradient-to-b from-slate-800 to-slate-900 text-white flex flex-col shadow-xl">
+      <!-- Logo -->
+      <div class="p-4 border-b border-slate-700">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center text-xl flex-shrink-0">
+            <i class="fas fa-toolbox"></i>
+          </div>
+          <div class="logo-text">
+            <h1 class="font-bold text-lg">个人开发工具箱</h1>
+            <p class="text-xs text-slate-400">Developer Toolbox</p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- 导航菜单 -->
+      <nav id="navContainer" class="flex-1 py-4 overflow-y-auto">
+        <div class="section-title px-3 mb-2">
+          <span class="nav-text text-xs text-slate-500 uppercase tracking-wider">工具列表</span>
+        </div>
+        <div id="toolsNav">
+          <!-- 动态生成 -->
+        </div>
+        
+        <div class="section-title px-3 mt-6 mb-2">
+          <span class="nav-text text-xs text-slate-500 uppercase tracking-wider">更多</span>
+        </div>
+        
+        <a href="#" onclick="loadToolById('tool-manager')"
+          class="nav-item flex items-center gap-3 px-4 py-3 text-slate-300 hover:text-white" data-tool="tool-manager">
+          <i class="fas fa-th-large w-5 text-center text-indigo-400 flex-shrink-0"></i>
+          <span class="nav-text">工具管理</span>
+        </a>
+        
+        <a href="#" onclick="loadToolById('tool-generator')"
+          class="nav-item flex items-center gap-3 px-4 py-3 text-slate-300 hover:text-white" data-tool="tool-generator">
+          <i class="fas fa-magic w-5 text-center text-purple-400 flex-shrink-0"></i>
+          <span class="nav-text">AI工具生成</span>
+        </a>
+        
+        <a href="#" onclick="showAbout()"
+          class="nav-item flex items-center gap-3 px-4 py-3 text-slate-300 hover:text-white">
+          <i class="fas fa-info-circle w-5 text-center text-slate-400 flex-shrink-0"></i>
+          <span class="nav-text">关于</span>
+        </a>
+        
+        <a href="#" onclick="showExport()"
+          class="nav-item flex items-center gap-3 px-4 py-3 text-slate-300 hover:text-white">
+          <i class="fas fa-download w-5 text-center text-yellow-400 flex-shrink-0"></i>
+          <span class="nav-text">导出程序</span>
+        </a>
+      </nav>
+      
+      <!-- 底部 -->
+      <div class="p-4 border-t border-slate-700">
+        <button onclick="toggleSidebar()" class="w-full flex items-center justify-center gap-2 py-2 text-slate-400 hover:text-white transition-colors">
+          <i id="toggleIcon" class="fas fa-chevron-left flex-shrink-0"></i>
+          <span class="nav-text text-sm">收起菜单</span>
+        </button>
+      </div>
+    </aside>
+    
+    <!-- 主内容区 -->
+    <main class="flex-1 flex flex-col overflow-hidden">
+      <!-- 顶部栏 -->
+      <header class="bg-white shadow-sm px-6 py-3 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <span id="currentToolIcon" class="w-8 h-8 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center">
+            <i class="fas fa-database"></i>
+          </span>
+          <div>
+            <h2 id="currentToolName" class="font-semibold text-gray-900">加载中...</h2>
+            <p id="currentToolDesc" class="text-xs text-gray-500">请稍候</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-4">
+          <span class="text-xs text-gray-400" id="currentTime"></span>
+          <button onclick="refreshTool()" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="刷新">
+            <i class="fas fa-sync-alt"></i>
+          </button>
+          <button onclick="openInNewTab()" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors" title="新窗口打开">
+            <i class="fas fa-external-link-alt"></i>
+          </button>
+        </div>
+      </header>
+      
+      <!-- 工具内容区 -->
+      <div class="flex-1 overflow-hidden bg-gray-50 frame-container">
+        <iframe id="toolFrame" class="tool-frame" src="about:blank"></iframe>
+      </div>
+    </main>
+  </div>
+
+  <!-- 关于对话框 -->
+  <div id="aboutModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md m-4 animate-fade-in">
+      <div class="p-6 text-center">
+        <div class="w-16 h-16 bg-blue-500 rounded-2xl flex items-center justify-center text-white text-3xl mx-auto mb-4">
+          <i class="fas fa-toolbox"></i>
+        </div>
+        <h3 class="text-xl font-bold text-gray-900 mb-2">开发工具箱</h3>
+        <p class="text-gray-500 text-sm mb-4">Developer Toolbox v1.0</p>
+        <div class="text-left bg-gray-50 rounded-lg p-4 mb-4">
+          <h4 class="font-semibold text-gray-700 mb-2">包含工具：</h4>
+          <ul id="aboutToolsList" class="text-sm text-gray-600 space-y-1">
+            <!-- 动态生成 -->
+          </ul>
+        </div>
+        <div class="text-left bg-gradient-to-r from-slate-100 to-slate-50 rounded-lg p-4 mb-4 border border-slate-200">
+          <h4 class="font-semibold text-gray-700 mb-2"><i class="fas fa-code mr-2 text-blue-500"></i>开发者信息</h4>
+          <p class="text-sm text-gray-600">
+            <span class="font-medium text-gray-800">nielz</span>
+          </p>
+        </div>
+        <button onclick="closeAbout()" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+          关闭
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 导出对话框 -->
+  <div id="exportModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md m-4 animate-fade-in">
+      <div class="p-6">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center text-yellow-600 text-xl">
+            <i class="fas fa-download"></i>
+          </div>
+          <div>
+            <h3 class="text-lg font-bold text-gray-900">导出程序</h3>
+            <p class="text-sm text-gray-500">下载完整程序代码包</p>
+          </div>
+        </div>
+        
+        <div class="bg-gray-50 rounded-lg p-4 mb-4">
+          <p class="text-sm text-gray-600 mb-3">导出内容包含：</p>
+          <ul class="text-sm text-gray-600 space-y-1 mb-4">
+            <li><i class="fas fa-check text-green-500 mr-2"></i>服务端代码 (server.js)</li>
+            <li><i class="fas fa-check text-green-500 mr-2"></i>前端页面 (public/*)</li>
+            <li><i class="fas fa-check text-green-500 mr-2"></i>依赖配置 (package.json)</li>
+            <li><i class="fas fa-check text-green-500 mr-2"></i>工具栏配置 (tools.json)</li>
+          </ul>
+          
+          <label class="flex items-center gap-3 cursor-pointer p-3 bg-white rounded-lg border border-gray-200 hover:border-blue-400 transition-colors">
+            <input type="checkbox" id="includeData" class="w-4 h-4 text-blue-600 rounded">
+            <div>
+              <span class="font-medium text-gray-800">包含数据</span>
+              <p class="text-xs text-gray-500">包含数据库连接、配置、笔记等数据</p>
+            </div>
+          </label>
+        </div>
+        
+        <div class="flex gap-3">
+          <button onclick="closeExport()" class="flex-1 px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors">
+            取消
+          </button>
+          <button onclick="downloadProject()" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+            <i class="fas fa-download mr-2"></i>下载
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 内置工具（不在 registry 中的系统工具）
+    const builtinTools = {
+      'tool-manager': { id: 'tool-manager', name: '工具管理', desc: '管理侧边栏显示的工具', icon: 'fa-th-large', color: 'indigo', url: '/tools/tool-manager.html' },
+      'tool-generator': { id: 'tool-generator', name: 'AI工具生成', desc: '通过 AI 自动生成新工具', icon: 'fa-magic', color: 'purple', url: '/tools/tool-generator.html' }
+    };
+    
+    // 状态
+    let allTools = [];
+    let sidebarTools = [];
+    let currentTool = null;
+    let sidebarCollapsed = false;
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', async () => {
+      updateTime();
+      setInterval(updateTime, 1000);
+      await loadToolsConfig();
+    });
+
+    // 加载工具配置
+    async function loadToolsConfig() {
+      try {
+        const [allRes, sidebarRes] = await Promise.all([
+          fetch('/api/tools'),
+          fetch('/api/tools/sidebar')
+        ]);
+        const allData = await allRes.json();
+        const sidebarData = await sidebarRes.json();
+        
+        allTools = allData.data || [];
+        sidebarTools = sidebarData.data.sidebar || [];
+        
+        renderNav();
+        renderAboutTools();
+        
+        // 加载工具
+        const hash = window.location.hash.slice(1);
+        const toolToLoad = hash || (sidebarTools.length > 0 ? sidebarTools[0] : null);
+        if (toolToLoad) {
+          loadToolById(toolToLoad);
+        }
+      } catch (err) {
+        console.error('加载工具配置失败:', err);
+      }
+    }
+
+    // 渲染导航
+    function renderNav() {
+      const container = document.getElementById('toolsNav');
+      const tools = sidebarTools.map(id => allTools.find(t => t.id === id)).filter(Boolean);
+      
+      if (tools.length === 0) {
+        container.innerHTML = `
+          <div class="px-4 py-3 text-slate-500 text-sm">
+            暂无工具，请到<br>「工具管理」添加
+          </div>
+        `;
+        return;
+      }
+      
+      container.innerHTML = tools.map(tool => `
+        <a href="#" onclick="loadToolById('${tool.id}')"
+          class="nav-item flex items-center gap-3 px-4 py-3 text-slate-300 hover:text-white ${currentTool === tool.id ? 'active' : ''}"
+          data-tool="${tool.id}">
+          <i class="fas ${tool.icon} w-5 text-center text-${tool.color}-400 flex-shrink-0"></i>
+          <span class="nav-text">${tool.name}</span>
+        </a>
+      `).join('');
+    }
+
+    // 渲染关于对话框工具列表
+    function renderAboutTools() {
+      const container = document.getElementById('aboutToolsList');
+      container.innerHTML = allTools.map(tool => 
+        `<li><i class="fas ${tool.icon} text-${tool.color}-500 mr-2"></i>${tool.name}</li>`
+      ).join('');
+    }
+
+    // 获取工具信息
+    function getToolInfo(toolId) {
+      return allTools.find(t => t.id === toolId) || builtinTools[toolId];
+    }
+
+    // 加载工具
+    function loadToolById(toolId) {
+      event?.preventDefault();
+      
+      const tool = getToolInfo(toolId);
+      if (!tool) return;
+      
+      if (currentTool === toolId) return;
+      
+      currentTool = toolId;
+      window.location.hash = toolId;
+      
+      // 更新导航状态
+      document.querySelectorAll('#toolsNav .nav-item, [data-tool]').forEach(item => {
+        item.classList.toggle('active', item.dataset.tool === toolId);
+      });
+      
+      // 更新顶部栏
+      document.getElementById('currentToolName').textContent = tool.name;
+      document.getElementById('currentToolDesc').textContent = tool.desc;
+      
+      const iconEl = document.getElementById('currentToolIcon');
+      iconEl.innerHTML = `<i class="fas ${tool.icon}"></i>`;
+      iconEl.className = `w-8 h-8 bg-${tool.color}-100 text-${tool.color}-600 rounded-lg flex items-center justify-center`;
+      
+      // 加载 iframe（立即加载，不延迟）
+      const frame = document.getElementById('toolFrame');
+      frame.src = tool.url;
+    }
+
+    // 更新时间
+    function updateTime() {
+      document.getElementById('currentTime').textContent = new Date().toLocaleString();
+    }
+
+    // 刷新工具
+    function refreshTool() {
+      const frame = document.getElementById('toolFrame');
+      frame.src = frame.src;
+    }
+
+    // 新窗口打开
+    function openInNewTab() {
+      const tool = getToolInfo(currentTool);
+      if (tool) window.open(tool.url, '_blank');
+    }
+
+    // 切换侧边栏
+    function toggleSidebar() {
+      sidebarCollapsed = !sidebarCollapsed;
+      document.getElementById('sidebar').classList.toggle('collapsed', sidebarCollapsed);
+      document.getElementById('toggleIcon').className = sidebarCollapsed ? 'fas fa-chevron-right flex-shrink-0' : 'fas fa-chevron-left flex-shrink-0';
+    }
+
+    // 显示关于
+    function showAbout() {
+      event.preventDefault();
+      document.getElementById('aboutModal').classList.remove('hidden');
+      document.getElementById('aboutModal').classList.add('flex');
+    }
+
+    // 关闭关于
+    function closeAbout() {
+      document.getElementById('aboutModal').classList.add('hidden');
+      document.getElementById('aboutModal').classList.remove('flex');
+    }
+
+    // 显示导出对话框
+    function showExport() {
+      event.preventDefault();
+      document.getElementById('exportModal').classList.remove('hidden');
+      document.getElementById('exportModal').classList.add('flex');
+    }
+
+    // 关闭导出对话框
+    function closeExport() {
+      document.getElementById('exportModal').classList.add('hidden');
+      document.getElementById('exportModal').classList.remove('flex');
+    }
+
+    // 下载程序包
+    function downloadProject() {
+      const includeData = document.getElementById('includeData').checked;
+      window.location.href = `/api/project/export?includeData=${includeData}`;
+      closeExport();
+    }
+
+    // 点击外部关闭
+    document.getElementById('aboutModal').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeAbout();
+    });
+    document.getElementById('exportModal').addEventListener('click', (e) => {
+      if (e.target === e.currentTarget) closeExport();
+    });
+
+    // 键盘快捷键
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeAbout();
+        closeExport();
+      }
+    });
+  </script>
+</body>
+</html>

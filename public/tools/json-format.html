@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JSON 格式化工具</title>
+  <script src="/assets/js/tailwind.js"></script>
+  <link rel="stylesheet" href="/assets/css/fontawesome.min.css">
+  <style>
+    body { opacity: 0; transition: opacity 0.1s; }
+    body.ready { opacity: 1; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .json-area { font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; line-height: 1.5; }
+    .toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; font-weight: 500; z-index: 1000; animation: fadeIn 0.3s ease-out; }
+    .toast-success { background: #22c55e; }
+    .toast-error { background: #ef4444; }
+    .toast-info { background: #3b82f6; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div class="p-6 max-w-7xl mx-auto">
+    <!-- 头部 -->
+    <div class="flex items-center justify-between mb-6">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-orange-500 rounded-xl flex items-center justify-center text-white text-xl">
+          <i class="fas fa-code"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold text-gray-900">JSON 格式化工具</h1>
+          <p class="text-sm text-gray-500">格式化、压缩、去除转义</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 工具栏 -->
+    <div class="bg-white rounded-xl shadow-sm p-4 mb-4">
+      <div class="flex flex-wrap gap-2">
+        <button onclick="formatJSON()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm">
+          <i class="fas fa-magic mr-2"></i>格式化
+        </button>
+        <button onclick="compressJSON()" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors text-sm">
+          <i class="fas fa-compress mr-2"></i>压缩
+        </button>
+        <button onclick="unescapeJSON()" class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm">
+          <i class="fas fa-eraser mr-2"></i>去除转义
+        </button>
+        <button onclick="escapeJSON()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm">
+          <i class="fas fa-quote-right mr-2"></i>添加转义
+        </button>
+        <button onclick="toSingleLine()" class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors text-sm">
+          <i class="fas fa-align-left mr-2"></i>转单行
+        </button>
+        <div class="flex-1"></div>
+        <button onclick="copyOutput()" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm">
+          <i class="fas fa-copy mr-2"></i>复制结果
+        </button>
+        <button onclick="clearAll()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm">
+          <i class="fas fa-trash mr-2"></i>清空
+        </button>
+      </div>
+    </div>
+
+    <!-- 主内容 -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <!-- 输入区 -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div class="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+          <span class="font-medium text-gray-700"><i class="fas fa-edit text-blue-500 mr-2"></i>输入</span>
+          <span id="inputStatus" class="text-xs text-gray-400"></span>
+        </div>
+        <textarea id="inputJSON" 
+          class="json-area w-full h-96 p-4 border-none outline-none resize-none"
+          placeholder="粘贴 JSON 内容..."
+          oninput="validateInput()"></textarea>
+      </div>
+
+      <!-- 输出区 -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div class="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+          <span class="font-medium text-gray-700"><i class="fas fa-file-code text-green-500 mr-2"></i>输出</span>
+          <span id="outputStatus" class="text-xs text-gray-400"></span>
+        </div>
+        <textarea id="outputJSON" 
+          class="json-area w-full h-96 p-4 border-none outline-none resize-none bg-gray-50"
+          placeholder="处理结果将显示在这里..."
+          readonly></textarea>
+      </div>
+    </div>
+
+    <!-- 常用示例 -->
+    <div class="mt-6 bg-white rounded-xl shadow-sm p-4">
+      <h3 class="font-medium text-gray-700 mb-3"><i class="fas fa-lightbulb text-yellow-500 mr-2"></i>快速示例</h3>
+      <div class="flex flex-wrap gap-2">
+        <button onclick="loadExample('escaped')" class="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+          转义字符串示例
+        </button>
+        <button onclick="loadExample('nested')" class="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+          嵌套对象示例
+        </button>
+        <button onclick="loadExample('array')" class="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors">
+          数组示例
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const examples = {
+      escaped: '"{\\\"name\\\":\\\"张三\\\",\\\"age\\\":25,\\\"city\\\":\\\"北京\\\"}"',
+      nested: '{"user":{"name":"李四","profile":{"age":30,"email":"test@example.com"}},"items":[1,2,3]}',
+      array: '[{"id":1,"name":"产品A","price":99.9},{"id":2,"name":"产品B","price":199.9}]'
+    };
+
+    // 验证输入
+    function validateInput() {
+      const input = document.getElementById('inputJSON').value.trim();
+      const status = document.getElementById('inputStatus');
+      
+      if (!input) {
+        status.textContent = '';
+        status.className = 'text-xs text-gray-400';
+        return;
+      }
+
+      try {
+        // 尝试解析，可能是转义的字符串
+        let parsed = input;
+        if (input.startsWith('"') && input.endsWith('"')) {
+          parsed = JSON.parse(input);
+        }
+        JSON.parse(parsed);
+        status.textContent = '✓ 有效 JSON';
+        status.className = 'text-xs text-green-600';
+      } catch {
+        status.textContent = '✗ 无效 JSON';
+        status.className = 'text-xs text-red-500';
+      }
+    }
+
+    // 格式化
+    function formatJSON() {
+      const input = document.getElementById('inputJSON').value.trim();
+      if (!input) return showToast('请输入 JSON', 'error');
+
+      try {
+        let data = input;
+        // 处理转义的 JSON 字符串
+        if (input.startsWith('"') && input.endsWith('"')) {
+          data = JSON.parse(input);
+        }
+        const obj = JSON.parse(data);
+        const formatted = JSON.stringify(obj, null, 2);
+        document.getElementById('outputJSON').value = formatted;
+        document.getElementById('outputStatus').textContent = `${formatted.length} 字符`;
+        showToast('格式化成功', 'success');
+      } catch (e) {
+        showToast('JSON 解析错误: ' + e.message, 'error');
+      }
+    }
+
+    // 压缩
+    function compressJSON() {
+      const input = document.getElementById('inputJSON').value.trim();
+      if (!input) return showToast('请输入 JSON', 'error');
+
+      try {
+        let data = input;
+        if (input.startsWith('"') && input.endsWith('"')) {
+          data = JSON.parse(input);
+        }
+        const obj = JSON.parse(data);
+        const compressed = JSON.stringify(obj);
+        document.getElementById('outputJSON').value = compressed;
+        document.getElementById('outputStatus').textContent = `${compressed.length} 字符`;
+        showToast('压缩成功', 'success');
+      } catch (e) {
+        showToast('JSON 解析错误: ' + e.message, 'error');
+      }
+    }
+
+    // 去除转义
+    function unescapeJSON() {
+      const input = document.getElementById('inputJSON').value.trim();
+      if (!input) return showToast('请输入内容', 'error');
+
+      try {
+        let result = input;
+        
+        // 多层去转义
+        let maxIterations = 10;
+        while (maxIterations-- > 0) {
+          // 如果是 "..." 包裹的字符串，解析它
+          if (result.startsWith('"') && result.endsWith('"')) {
+            result = JSON.parse(result);
+          } else {
+            break;
+          }
+        }
+        
+        // 尝试格式化
+        try {
+          const obj = JSON.parse(result);
+          result = JSON.stringify(obj, null, 2);
+        } catch {}
+        
+        document.getElementById('outputJSON').value = result;
+        document.getElementById('outputStatus').textContent = `${result.length} 字符`;
+        showToast('去除转义成功', 'success');
+      } catch (e) {
+        showToast('处理错误: ' + e.message, 'error');
+      }
+    }
+
+    // 添加转义
+    function escapeJSON() {
+      const input = document.getElementById('inputJSON').value.trim();
+      if (!input) return showToast('请输入内容', 'error');
+
+      try {
+        // 验证是否为有效 JSON
+        JSON.parse(input);
+        const escaped = JSON.stringify(input);
+        document.getElementById('outputJSON').value = escaped;
+        document.getElementById('outputStatus').textContent = `${escaped.length} 字符`;
+        showToast('添加转义成功', 'success');
+      } catch (e) {
+        // 不是有效 JSON，直接转义字符串
+        const escaped = JSON.stringify(input);
+        document.getElementById('outputJSON').value = escaped;
+        document.getElementById('outputStatus').textContent = `${escaped.length} 字符`;
+        showToast('添加转义成功', 'success');
+      }
+    }
+
+    // 转单行
+    function toSingleLine() {
+      const input = document.getElementById('inputJSON').value.trim();
+      if (!input) return showToast('请输入内容', 'error');
+
+      try {
+        let data = input;
+        if (input.startsWith('"') && input.endsWith('"')) {
+          data = JSON.parse(input);
+        }
+        const obj = JSON.parse(data);
+        const singleLine = JSON.stringify(obj);
+        document.getElementById('outputJSON').value = singleLine;
+        document.getElementById('outputStatus').textContent = `${singleLine.length} 字符`;
+        showToast('转换成功', 'success');
+      } catch (e) {
+        // 非 JSON，直接去除换行
+        const singleLine = input.replace(/\s+/g, ' ').trim();
+        document.getElementById('outputJSON').value = singleLine;
+        document.getElementById('outputStatus').textContent = `${singleLine.length} 字符`;
+        showToast('转换成功', 'success');
+      }
+    }
+
+    // 复制输出
+    function copyOutput() {
+      const output = document.getElementById('outputJSON').value;
+      if (!output) return showToast('没有可复制的内容', 'error');
+      
+      navigator.clipboard.writeText(output).then(() => {
+        showToast('已复制到剪贴板', 'success');
+      }).catch(() => {
+        // 降级方案
+        document.getElementById('outputJSON').select();
+        document.execCommand('copy');
+        showToast('已复制到剪贴板', 'success');
+      });
+    }
+
+    // 清空
+    function clearAll() {
+      document.getElementById('inputJSON').value = '';
+      document.getElementById('outputJSON').value = '';
+      document.getElementById('inputStatus').textContent = '';
+      document.getElementById('outputStatus').textContent = '';
+    }
+
+    // 加载示例
+    function loadExample(type) {
+      document.getElementById('inputJSON').value = examples[type];
+      validateInput();
+    }
+
+    // Toast
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      const icons = { success: 'check-circle', error: 'exclamation-circle', info: 'info-circle' };
+      toast.innerHTML = `<i class="fas fa-${icons[type]} mr-2"></i>${message}`;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 2000);
+    }
+
+    // 快捷键
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        formatJSON();
+        e.preventDefault();
+      }
+    });
+    
+    // 显示页面
+    document.body.classList.add('ready');
+  </script>
+</body>
+</html>

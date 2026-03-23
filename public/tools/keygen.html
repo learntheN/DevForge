@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>随机密钥生成器</title>
+  <script src="/assets/js/tailwind.js"></script>
+  <link rel="stylesheet" href="/assets/css/fontawesome.min.css">
+  <style>
+    body { opacity: 0; transition: opacity 0.1s; }
+    body.ready { opacity: 1; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; font-weight: 500; z-index: 1000; animation: fadeIn 0.3s ease-out; }
+    .toast-success { background: #22c55e; }
+    .toast-error { background: #ef4444; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    .key-item { font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; }
+    .key-item:hover { background-color: #f0fdf4; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-6">
+  <div class="max-w-4xl mx-auto">
+    <!-- 头部 -->
+    <header class="mb-8">
+      <div class="flex items-center gap-3">
+        <div class="w-12 h-12 bg-green-600 rounded-xl flex items-center justify-center text-white text-2xl">
+          <i class="fas fa-key"></i>
+        </div>
+        <div>
+          <h1 class="text-2xl font-bold text-gray-900">随机密钥生成器</h1>
+          <p class="text-gray-500 text-sm">生成安全的随机密码、密钥和令牌</p>
+        </div>
+      </div>
+    </header>
+
+    <div class="grid grid-cols-12 gap-6">
+      <!-- 左侧：配置区 -->
+      <div class="col-span-4 space-y-6">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5 space-y-5">
+          <h2 class="font-semibold text-gray-900 border-b pb-3">
+            <i class="fas fa-cog text-green-600 mr-2"></i>生成配置
+          </h2>
+
+          <!-- 密钥长度 -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">密钥长度</label>
+            <div class="grid grid-cols-5 gap-2">
+              <button onclick="setLength(8)" data-length="8" class="length-btn px-3 py-2 text-sm border rounded-lg transition-colors">8</button>
+              <button onclick="setLength(16)" data-length="16" class="length-btn px-3 py-2 text-sm border rounded-lg transition-colors bg-green-600 text-white border-green-600">16</button>
+              <button onclick="setLength(32)" data-length="32" class="length-btn px-3 py-2 text-sm border rounded-lg transition-colors">32</button>
+              <button onclick="setLength(64)" data-length="64" class="length-btn px-3 py-2 text-sm border rounded-lg transition-colors">64</button>
+              <button onclick="setLength(128)" data-length="128" class="length-btn px-3 py-2 text-sm border rounded-lg transition-colors">128</button>
+            </div>
+            <div class="mt-2">
+              <input type="number" id="customLength" min="1" max="256" value="16" 
+                class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="自定义长度">
+            </div>
+          </div>
+
+          <!-- 生成数量 -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">生成数量</label>
+            <input type="number" id="quantity" min="1" max="100" value="5" 
+              class="w-full px-3 py-2 border rounded-lg">
+          </div>
+
+          <!-- 字符集 -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">字符集</label>
+            <div class="space-y-2">
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="chkNumbers" checked class="w-4 h-4 accent-green-600">
+                <span class="text-sm">数字 (0-9)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="chkLowercase" checked class="w-4 h-4 accent-green-600">
+                <span class="text-sm">小写字母 (a-z)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="chkUppercase" checked class="w-4 h-4 accent-green-600">
+                <span class="text-sm">大写字母 (A-Z)</span>
+              </label>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="chkSpecial" class="w-4 h-4 accent-green-600">
+                <span class="text-sm">特殊字符 (!@#$%^&*)</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- 生成按钮 -->
+          <button onclick="generateKeys()" 
+            class="w-full py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors">
+            <i class="fas fa-magic mr-2"></i>生成密钥
+          </button>
+        </div>
+
+        <!-- 快捷预设 -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+          <h2 class="font-semibold text-gray-900 border-b pb-3 mb-4">
+            <i class="fas fa-bolt text-yellow-500 mr-2"></i>快捷预设
+          </h2>
+          <div class="space-y-2">
+            <button onclick="preset('pin')" class="w-full px-4 py-2 text-left text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+              <i class="fas fa-hashtag text-gray-400 mr-2"></i>PIN码 (6位数字)
+            </button>
+            <button onclick="preset('password')" class="w-full px-4 py-2 text-left text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+              <i class="fas fa-lock text-gray-400 mr-2"></i>强密码 (16位混合)
+            </button>
+            <button onclick="preset('token')" class="w-full px-4 py-2 text-left text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+              <i class="fas fa-ticket text-gray-400 mr-2"></i>API Token (32位)
+            </button>
+            <button onclick="preset('uuid')" class="w-full px-4 py-2 text-left text-sm bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors">
+              <i class="fas fa-fingerprint text-gray-400 mr-2"></i>UUID v4
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧：结果区 -->
+      <div class="col-span-8 space-y-6">
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 class="font-semibold text-gray-900">
+              <i class="fas fa-list text-green-600 mr-2"></i>生成结果
+              <span id="resultCount" class="ml-2 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">0</span>
+            </h2>
+            <div class="flex gap-2">
+              <button onclick="copyAll()" class="px-3 py-1.5 text-sm text-green-600 hover:bg-green-50 rounded-lg transition-colors">
+                <i class="fas fa-copy mr-1"></i>复制全部
+              </button>
+              <button onclick="clearResults()" class="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                <i class="fas fa-trash mr-1"></i>清空
+              </button>
+            </div>
+          </div>
+          <div id="results" class="divide-y divide-gray-100 max-h-96 overflow-y-auto">
+            <div class="text-center py-16 text-gray-400">
+              <i class="fas fa-key text-5xl mb-4 opacity-30"></i>
+              <p>点击"生成密钥"开始</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- 历史记录 -->
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <h2 class="font-semibold text-gray-900">
+              <i class="fas fa-history text-blue-600 mr-2"></i>生成历史
+              <span id="historyCount" class="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">0</span>
+            </h2>
+            <button onclick="clearHistory()" class="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+              <i class="fas fa-trash mr-1"></i>清空历史
+            </button>
+          </div>
+          <div id="history" class="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+            <div class="text-center py-8 text-gray-400">
+              <p class="text-sm">暂无历史记录</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentLength = 16;
+    let generatedKeys = [];
+    let history = JSON.parse(localStorage.getItem('keygenHistory') || '[]');
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', () => {
+      renderHistory();
+      document.getElementById('customLength').addEventListener('change', (e) => {
+        setLength(parseInt(e.target.value) || 16);
+      });
+      // 显示页面
+      document.body.classList.add('ready');
+    });
+
+    // 设置长度
+    function setLength(len) {
+      currentLength = len;
+      document.getElementById('customLength').value = len;
+      document.querySelectorAll('.length-btn').forEach(btn => {
+        if (parseInt(btn.dataset.length) === len) {
+          btn.classList.add('bg-green-600', 'text-white', 'border-green-600');
+          btn.classList.remove('border-gray-300', 'hover:bg-gray-50');
+        } else {
+          btn.classList.remove('bg-green-600', 'text-white', 'border-green-600');
+          btn.classList.add('border-gray-300', 'hover:bg-gray-50');
+        }
+      });
+    }
+
+    // 生成随机字符串
+    function generateRandomString(length, charset) {
+      let result = '';
+      const array = new Uint32Array(length);
+      crypto.getRandomValues(array);
+      for (let i = 0; i < length; i++) {
+        result += charset[array[i] % charset.length];
+      }
+      return result;
+    }
+
+    // 生成 UUID v4
+    function generateUUID() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+
+    // 生成密钥
+    function generateKeys() {
+      let charset = '';
+      if (document.getElementById('chkNumbers').checked) charset += '0123456789';
+      if (document.getElementById('chkLowercase').checked) charset += 'abcdefghijklmnopqrstuvwxyz';
+      if (document.getElementById('chkUppercase').checked) charset += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      if (document.getElementById('chkSpecial').checked) charset += '!@#$%^&*()_+-=[]{}|;:,.<>?';
+
+      if (!charset) {
+        showToast('请至少选择一种字符集', 'error');
+        return;
+      }
+
+      const quantity = parseInt(document.getElementById('quantity').value) || 1;
+      const length = parseInt(document.getElementById('customLength').value) || 16;
+
+      generatedKeys = [];
+      for (let i = 0; i < quantity; i++) {
+        generatedKeys.push(generateRandomString(length, charset));
+      }
+
+      renderResults();
+      addToHistory(generatedKeys, `${length}位, ${quantity}个`);
+    }
+
+    // 预设
+    function preset(type) {
+      switch(type) {
+        case 'pin':
+          document.getElementById('chkNumbers').checked = true;
+          document.getElementById('chkLowercase').checked = false;
+          document.getElementById('chkUppercase').checked = false;
+          document.getElementById('chkSpecial').checked = false;
+          setLength(6);
+          document.getElementById('quantity').value = 5;
+          break;
+        case 'password':
+          document.getElementById('chkNumbers').checked = true;
+          document.getElementById('chkLowercase').checked = true;
+          document.getElementById('chkUppercase').checked = true;
+          document.getElementById('chkSpecial').checked = true;
+          setLength(16);
+          document.getElementById('quantity').value = 5;
+          break;
+        case 'token':
+          document.getElementById('chkNumbers').checked = true;
+          document.getElementById('chkLowercase').checked = true;
+          document.getElementById('chkUppercase').checked = true;
+          document.getElementById('chkSpecial').checked = false;
+          setLength(32);
+          document.getElementById('quantity').value = 3;
+          break;
+        case 'uuid':
+          generatedKeys = [];
+          const qty = parseInt(document.getElementById('quantity').value) || 5;
+          for (let i = 0; i < qty; i++) {
+            generatedKeys.push(generateUUID());
+          }
+          renderResults();
+          addToHistory(generatedKeys, 'UUID v4');
+          return;
+      }
+      generateKeys();
+    }
+
+    // 渲染结果
+    function renderResults() {
+      const container = document.getElementById('results');
+      document.getElementById('resultCount').textContent = generatedKeys.length;
+
+      if (generatedKeys.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-16 text-gray-400">
+            <i class="fas fa-key text-5xl mb-4 opacity-30"></i>
+            <p>点击"生成密钥"开始</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = generatedKeys.map((key, index) => `
+        <div class="key-item flex items-center justify-between px-5 py-3 group">
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-gray-400 w-6">#${index + 1}</span>
+            <code class="text-sm text-gray-800 break-all">${key}</code>
+          </div>
+          <button onclick="copyKey('${key}')" 
+            class="opacity-0 group-hover:opacity-100 px-3 py-1 text-xs text-green-600 hover:bg-green-50 rounded transition-all">
+            <i class="fas fa-copy mr-1"></i>复制
+          </button>
+        </div>
+      `).join('');
+    }
+
+    // 复制单个密钥
+    function copyKey(key) {
+      navigator.clipboard.writeText(key).then(() => {
+        showToast('已复制到剪贴板', 'success');
+      });
+    }
+
+    // 复制全部
+    function copyAll() {
+      if (generatedKeys.length === 0) {
+        showToast('没有可复制的内容', 'error');
+        return;
+      }
+      navigator.clipboard.writeText(generatedKeys.join('\n')).then(() => {
+        showToast(`已复制 ${generatedKeys.length} 个密钥`, 'success');
+      });
+    }
+
+    // 清空结果
+    function clearResults() {
+      generatedKeys = [];
+      renderResults();
+    }
+
+    // 添加到历史
+    function addToHistory(keys, desc) {
+      history.unshift({
+        keys: keys.slice(0, 3),
+        total: keys.length,
+        desc,
+        time: new Date().toLocaleString()
+      });
+      if (history.length > 20) history = history.slice(0, 20);
+      localStorage.setItem('keygenHistory', JSON.stringify(history));
+      renderHistory();
+    }
+
+    // 渲染历史
+    function renderHistory() {
+      const container = document.getElementById('history');
+      document.getElementById('historyCount').textContent = history.length;
+
+      if (history.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-8 text-gray-400">
+            <p class="text-sm">暂无历史记录</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = history.map((item, index) => `
+        <div class="px-5 py-3 hover:bg-gray-50">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs text-gray-500">${item.time}</span>
+            <span class="text-xs bg-gray-100 px-2 py-0.5 rounded">${item.desc}</span>
+          </div>
+          <div class="text-xs text-gray-600 font-mono truncate">
+            ${item.keys[0]}${item.total > 1 ? ` ... (共${item.total}个)` : ''}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // 清空历史
+    function clearHistory() {
+      if (!confirm('确定要清空所有历史记录吗？')) return;
+      history = [];
+      localStorage.removeItem('keygenHistory');
+      renderHistory();
+    }
+
+    // Toast 提示
+    function showToast(message, type = 'success') {
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check' : 'exclamation'}-circle mr-2"></i>${message}`;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 2000);
+    }
+  </script>
+</body>
+</html>

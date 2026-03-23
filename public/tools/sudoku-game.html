@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数独游戏</title>
+  <script src="/assets/js/tailwind.js"></script>
+  <link rel="stylesheet" href="/assets/css/fontawesome.min.css">
+  <style>
+    body { opacity: 0; transition: opacity 0.1s; }
+    body.ready { opacity: 1; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; font-weight: 500; z-index: 1000; animation: fadeIn 0.3s ease-out; }
+    .toast-success { background: #22c55e; }
+    .toast-error { background: #ef4444; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    .cell-fixed { background-color: #f8fafc; font-weight: 600; }
+    .cell-error { background-color: #fee2e2; }
+    .cell-user { background-color: #ffffff; }
+    .cell-selected { background-color: #dbeafe; }
+    .board-border { border: 2px solid #1e40af; }
+    .cell-border { border: 1px solid #cbd5e1; }
+    .cell-border-thick { border: 2px solid #1e40af; }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen p-4">
+  <div class="max-w-6xl mx-auto">
+    <header class="mb-6">
+      <h1 class="text-3xl font-bold text-blue-600"><i class="fas fa-puzzle-piece mr-2"></i>数独游戏</h1>
+      <p class="text-gray-600 mt-2">填写数字1-9，确保每行、每列和每个3x3宫格内数字不重复</p>
+    </header>
+
+    <div class="flex flex-col lg:flex-row gap-6">
+      <!-- 游戏棋盘 -->
+      <div class="lg:w-2/3">
+        <div class="bg-white rounded-xl shadow-lg p-4 lg:p-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold text-gray-800">数独棋盘</h2>
+            <div class="text-sm text-gray-500">已用时: <span id="timer">00:00</span></div>
+          </div>
+          
+          <div class="overflow-x-auto">
+            <div id="sudoku-board" class="inline-block bg-white board-border">
+              <!-- 棋盘通过JS生成 -->
+            </div>
+          </div>
+          
+          <div class="mt-6 text-center text-gray-500 text-sm">
+            <p>点击单元格选择，然后点击下方数字输入或删除</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 控制面板 -->
+      <div class="lg:w-1/3">
+        <div class="bg-white rounded-xl shadow-lg p-6">
+          <h2 class="text-xl font-semibold text-gray-800 mb-6">游戏控制</h2>
+          
+          <!-- 数字键盘 -->
+          <div class="mb-8">
+            <h3 class="text-lg font-medium text-gray-700 mb-3">数字输入</h3>
+            <div class="grid grid-cols-3 gap-3">
+              <button class="num-btn bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold py-4 rounded-lg transition" data-num="1">1</button>
+              <button class="num-btn bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold py-4 rounded-lg transition" data-num="2">2</button>
+              <button class="num-btn bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold py-4 rounded-lg transition" data-num="3">3</button>
+              <button class="num-btn bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold py-4 rounded-lg transition" data-num="4">4</button>
+              <button class="num-btn bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold py-4 rounded-lg transition" data-num="5">5</button>
+              <button class="num-btn bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold py-4 rounded-lg transition" data-num="6">6</button>
+              <button class="num-btn bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold py-4 rounded-lg transition" data-num="7">7</button>
+              <button class="num-btn bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold py-4 rounded-lg transition" data-num="8">8</button>
+              <button class="num-btn bg-blue-100 hover:bg-blue-200 text-blue-700 font-bold py-4 rounded-lg transition" data-num="9">9</button>
+              <button class="bg-red-100 hover:bg-red-200 text-red-700 font-bold py-4 rounded-lg transition col-span-3" id="delete-btn">
+                <i class="fas fa-backspace mr-2"></i>删除数字
+              </button>
+            </div>
+          </div>
+          
+          <!-- 游戏控制按钮 -->
+          <div class="space-y-4">
+            <button id="new-game-btn" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 rounded-lg transition">
+              <i class="fas fa-plus-circle mr-2"></i>新游戏
+            </button>
+            <button id="validate-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 rounded-lg transition">
+              <i class="fas fa-check-circle mr-2"></i>验证答案
+            </button>
+            <button id="save-btn" class="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-3 rounded-lg transition">
+              <i class="fas fa-save mr-2"></i>保存进度
+            </button>
+            <button id="load-btn" class="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 rounded-lg transition">
+              <i class="fas fa-download mr-2"></i>加载进度
+            </button>
+          </div>
+          
+          <!-- 游戏状态 -->
+          <div class="mt-8 p-4 bg-gray-50 rounded-lg">
+            <h3 class="text-lg font-medium text-gray-700 mb-2">游戏状态</h3>
+            <div class="space-y-2">
+              <div class="flex justify-between">
+                <span class="text-gray-600">剩余空格:</span>
+                <span id="remaining-cells" class="font-bold">81</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-600">错误数:</span>
+                <span id="error-count" class="font-bold text-red-600">0</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-600">游戏状态:</span>
+                <span id="game-status" class="font-bold text-blue-600">进行中</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 游戏状态
+    let gameState = {
+      board: Array(9).fill().map(() => Array(9).fill(0)),
+      fixed: Array(9).fill().map(() => Array(9).fill(false)),
+      selectedCell: null,
+      startTime: null,
+      timerInterval: null,
+      errors: 0
+    };
+
+    // Toast 函数
+    function showToast(message, type = 'success') {
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} mr-2"></i>${message}`;
+      document.body.appendChild(toast);
+      setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 2000);
+    }
+
+    // 生成简单数独谜题
+    function generatePuzzle() {
+      // 简单数独模板（部分预填数字）
+      const template = [
+        [5, 3, 0, 0, 7, 0, 0, 0, 0],
+        [6, 0, 0, 1, 9, 5, 0, 0, 0],
+        [0, 9, 8, 0, 0, 0, 0, 6, 0],
+        [8, 0, 0, 0, 6, 0, 0, 0, 3],
+        [4, 0, 0, 8, 0, 3, 0, 0, 1],
+        [7, 0, 0, 0, 2, 0, 0, 0, 6],
+        [0, 6, 0, 0, 0, 0, 2, 8, 0],
+        [0, 0, 0, 4, 1, 9, 0, 0, 5],
+        [0, 0, 0, 0, 8, 0, 0, 7, 9]
+      ];
+      
+      gameState.board = JSON.parse(JSON.stringify(template));
+      gameState.fixed = template.map(row => row.map(cell => cell !== 0));
+    }
+
+    // 渲染棋盘
+    function renderBoard() {
+      const boardEl = document.getElementById('sudoku-board');
+      boardEl.innerHTML = '';
+      
+      for (let i = 0; i < 9; i++) {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'flex';
+        
+        for (let j = 0; j < 9; j++) {
+          const cellEl = document.createElement('div');
+          cellEl.className = 'w-10 h-10 md:w-12 md:h-12 flex items-center justify-center text-lg md:text-xl font-medium cursor-pointer cell-border';
+          
+          // 添加粗边框
+          if (i % 3 === 0) cellEl.classList.add('border-t-2', 'border-blue-800');
+          if (j % 3 === 0) cellEl.classList.add('border-l-2', 'border-blue-800');
+          if (i === 8) cellEl.classList.add('border-b-2', 'border-blue-800');
+          if (j === 8) cellEl.classList.add('border-r-2', 'border-blue-800');
+          
+          cellEl.dataset.row = i;
+          cellEl.dataset.col = j;
+          
+          const value = gameState.board[i][j];
+          if (value !== 0) {
+            cellEl.textContent = value;
+            if (gameState.fixed[i][j]) {
+              cellEl.classList.add('cell-fixed', 'text-blue-800');
+            } else {
+              cellEl.classList.add('cell-user', 'text-gray-800');
+            }
+          }
+          
+          // 选中状态
+          if (gameState.selectedCell && gameState.selectedCell.row === i && gameState.selectedCell.col === j) {
+            cellEl.classList.add('cell-selected');
+          }
+          
+          cellEl.addEventListener('click', () => selectCell(i, j));
+          rowEl.appendChild(cellEl);
+        }
+        
+        boardEl.appendChild(rowEl);
+      }
+      
+      updateStats();
+    }
+
+    // 选择单元格
+    function selectCell(row, col) {
+      if (gameState.fixed[row][col]) return;
+      
+      gameState.selectedCell = { row, col };
+      renderBoard();
+    }
+
+    // 输入数字
+    function inputNumber(num) {
+      if (!gameState.selectedCell) {
+        showToast('请先选择一个单元格', 'error');
+        return;
+      }
+      
+      const { row, col } = gameState.selectedCell;
+      if (gameState.fixed[row][col]) {
+        showToast('此单元格不可修改', 'error');
+        return;
+      }
+      
+      gameState.board[row][col] = num;
+      validateCell(row, col);
+      renderBoard();
+      autoSave();
+    }
+
+    // 删除数字
+    function deleteNumber() {
+      if (!gameState.selectedCell) {
+        showToast('请先选择一个单元格', 'error');
+        return;
+      }
+      
+      const { row, col } = gameState.selectedCell;
+      if (gameState.fixed[row][col]) {
+        showToast('此单元格不可修改', 'error');
+        return;
+      }
+      
+      gameState.board[row][col] = 0;
+      renderBoard();
+      autoSave();
+    }
+
+    // 验证单个单元格
+    function validateCell(row, col) {
+      const value = gameState.board[row][col];
+      if (value === 0) return true;
+      
+      // 检查行
+      for (let j = 0; j < 9; j++) {
+        if (j !== col && gameState.board[row][j] === value) {
+          return false;
+        }
+      }
+      
+      // 检查列
+      for (let i = 0; i < 9; i++) {
+        if (i !== row && gameState.board[i][col] === value) {
+          return false;
+        }
+      }
+      
+      // 检查3x3宫格
+      const startRow = Math.floor(row / 3) * 3;
+      const startCol = Math.floor(col / 3) * 3;
+      for (let i = startRow; i < startRow + 3; i++) {
+        for (let j = startCol; j < startCol + 3; j++) {
+          if (i !== row && j !== col && gameState.board[i][j] === value) {
+            return false;
+          }
+        }
+      }
+      
+      return true;
+    }
+
+    // 验证整个棋盘
+    function validateBoard() {
+      let isValid = true;
+      let errorCount = 0;
+      
+      for (let i = 0; i < 9; i++) {
+        for (let j = 0; j < 9; j++) {
+          if (gameState.board[i][j] !== 0 && !validateCell(i, j)) {
+            errorCount++;
+            isValid = false;
+          }
+        }
+      }
+      
+      gameState.errors = errorCount;
+      updateStats();
+      
+      if (isValid) {
+        // 检查是否完成
+        let isComplete = true;
+        for (let i = 0; i < 9; i++) {
+          for (let j = 0; j < 9; j++) {
+            if (gameState.board[i][j] === 0) {
+              isComplete = false;
+              break;
+            }
+          }
+          if (!isComplete) break;
+        }
+        
+        if (isComplete) {
+          showToast('恭喜！数独完成！', 'success');
+          document.getElementById('game-status').textContent = '已完成';
+          document.getElementById('game-status').className = 'font-bold text-green-600';
+          if (gameState.timerInterval) {
+            clearInterval(gameState.timerInterval);
+          }
+        } else {
+          showToast('当前填写正确，但还有空格', 'success');
+        }
+      } else {
+        showToast(`发现 ${errorCount} 处错误`, 'error');
+      }
+      
+      return isValid;
+    }
+
+    // 更新统计信息
+    function updateStats() {
+      let remaining = 0;
+      for (let i = 0; i < 9; i++) {
+        for (let j = 0; j < 9; j++) {
+          if (gameState.board[i][j] === 0) remaining++;
+        }
+      }
+      
+      document.getElementById('remaining-cells').textContent = remaining;
+      document.getElementById('error-count').textContent = gameState.errors;
+    }
+
+    // 开始计时器
+    function startTimer() {
+      if (gameState.timerInterval) {
+        clearInterval(gameState.timerInterval);
+      }
+      
+      gameState.startTime = new Date();
+      gameState.timerInterval = setInterval(updateTimer, 1000);
+      updateTimer();
+    }
+
+    // 更新计时器显示
+    function updateTimer() {
+      if (!gameState.startTime) return;
+      
+      const now = new Date();
+      const diff = Math.floor((now - gameState.startTime) / 1000);
+      const minutes = Math.floor(diff / 60).toString().padStart(2, '0');
+      const seconds = (diff % 60).toString().padStart(2, '0');
+      
+      document.getElementById('timer').textContent = `${minutes}:${seconds}`;
+    }
+
+    // 自动保存
+    function autoSave() {
+      try {
+        localStorage.setItem('sudoku-game-state', JSON.stringify({
+          board: gameState.board,
+          fixed: gameState.fixed,
+          startTime: gameState.startTime ? gameState.startTime.getTime() : null
+        }));
+      } catch (err) {
+        console.error('自动保存失败:', err);
+      }
+    }
+
+    // 加载保存的游戏
+    function loadGame() {
+      try {
+        const saved = localStorage.getItem('sudoku-game-state');
+        if (saved) {
+          const data = JSON.parse(saved);
+          gameState.board = data.board;
+          gameState.fixed = data.fixed;
+          if (data.startTime) {
+            gameState.startTime = new Date(data.startTime);
+            startTimer();
+          }
+          renderBoard();
+          showToast('游戏进度已加载', 'success');
+        } else {
+          showToast('没有找到保存的游戏进度', 'error');
+        }
+      } catch (err) {
+        console.error('加载失败:', err);
+        showToast('加载失败，请开始新游戏', 'error');
+      }
+    }
+
+    // 新游戏
+    function newGame() {
+      generatePuzzle();
+      gameState.selectedCell = null;
+      gameState.errors = 0;
+      startTimer();
+      renderBoard();
+      
+      document.getElementById('game-status').textContent = '进行中';
+      document.getElementById('game-status').className = 'font-bold text-blue-600';
+      
+      showToast('新游戏已开始', 'success');
+    }
+
+    // 初始化事件监听
+    function initEventListeners() {
+      // 数字按钮
+      document.querySelectorAll('.num-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const num = parseInt(btn.dataset.num);
+          inputNumber(num);
+        });
+      });
+      
+      // 删除按钮
+      document.getElementById('delete-btn').addEventListener('click', deleteNumber);
+      
+      // 新游戏按钮
+      document.getElementById('new-game-btn').addEventListener('click', newGame);
+      
+      // 验证按钮
+      document.getElementById('validate-btn').addEventListener('click', validateBoard);
+      
+      // 保存按钮
+      document.getElementById('save-btn').addEventListener('click', () => {
+        autoSave();
+        showToast('游戏进度已保存', 'success');
+      });
+      
+      // 加载按钮
+      document.getElementById('load-btn').addEventListener('click', loadGame);
+      
+      // 键盘支持
+      document.addEventListener('keydown', (e) => {
+        if (!gameState.selectedCell) return;
+        
+        const key = e.key;
+        if (key >= '1' && key <= '9') {
+          inputNumber(parseInt(key));
+        } else if (key === 'Backspace' || key === 'Delete' || key === '0') {
+          deleteNumber();
+        } else if (key === 'ArrowUp' && gameState.selectedCell.row > 0) {
+          selectCell(gameState.selectedCell.row - 1, gameState.selectedCell.col);
+        } else if (key === 'ArrowDown' && gameState.selectedCell.row < 8) {
+          selectCell(gameState.selectedCell.row + 1, gameState.selectedCell.col);
+        } else if (key === 'ArrowLeft' && gameState.selectedCell.col > 0) {
+          selectCell(gameState.selectedCell.row, gameState.selectedCell.col - 1);
+        } else if (key === 'ArrowRight' && gameState.selectedCell.col < 8) {
+          selectCell(gameState.selectedCell.row, gameState.selectedCell.col + 1);
+        }
+      });
+    }
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', () => {
+      // 生成初始游戏
+      generatePuzzle();
+      
+      // 尝试加载保存的游戏
+      try {
+        const saved = localStorage.getItem('sudoku-game-state');
+        if (saved) {
+          const data = JSON.parse(saved);
+          gameState.board = data.board;
+          gameState.fixed = data.fixed;
+          if (data.startTime) {
+            gameState.startTime = new Date(data.startTime);
+          }
+        }
+      } catch (err) {
+        console.error('加载保存的游戏失败:', err);
+      }
+      
+      // 渲染棋盘
+      renderBoard();
+      
+      // 启动计时器
+      if (!gameState.startTime) {
+        gameState.startTime = new Date();
+      }
+      startTimer();
+      
+      // 初始化事件监听
+      initEventListeners();
+      
+      // 显示页面
+      document.body.classList.add('ready');
+    });
+  </script>
+</body>
+</html>

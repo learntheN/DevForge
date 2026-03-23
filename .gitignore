@@ -1,0 +1,35 @@
+# Dev Toolbox .gitignore
+
+# 敏感配置
+data/ai/config.json
+
+# 用户数据
+data/ai/tasks.json
+data/ai/logs/
+data/ai/previews/
+data/db-export/connections.json
+data/db-export/configs.json
+data/notebook/notes.json
+data/bookmarks/bookmarks.json
+
+# 保留版本存档（开源展示）
+!data/ai/versions/
+
+# 依赖
+node_modules/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+*.log
+
+# IDE
+.idea/
+.vscode/
+.qoder/
+*.swp
+*.swo
+
+# 临时文件
+*.tmp
+*.temp

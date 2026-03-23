@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>工具管理</title>
+  <script src="/assets/js/tailwind.js"></script>
+  <link rel="stylesheet" href="/assets/css/fontawesome.min.css">
+  <style>
+    body { opacity: 0; transition: opacity 0.1s; }
+    body.ready { opacity: 1; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    
+    /* 侧边栏工具卡片 */
+    .sidebar-card {
+      transition: transform 0.2s, box-shadow 0.2s, opacity 0.2s;
+      cursor: grab;
+      user-select: none;
+    }
+    .sidebar-card:active { cursor: grabbing; }
+    .sidebar-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .sidebar-card.dragging { 
+      opacity: 0.4; 
+      transform: scale(0.95);
+      box-shadow: 0 8px 25px rgba(59,130,246,0.3);
+    }
+    
+    /* 拖拽占位符 */
+    .drag-placeholder {
+      height: 56px;
+      border: 2px dashed #3b82f6;
+      border-radius: 8px;
+      background: #eff6ff;
+      margin-bottom: 8px;
+      animation: pulse 1s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.6; }
+      50% { opacity: 1; }
+    }
+    
+    /* 可用工具小方格 */
+    .tool-grid-item {
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .tool-grid-item:hover { 
+      transform: translateY(-2px); 
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .tool-grid-item.in-sidebar {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+    
+    /* 预览导航项 */
+    .preview-nav-item {
+      transition: background-color 0.2s;
+    }
+    .preview-nav-item:hover {
+      background: rgba(255,255,255,0.1);
+    }
+    
+    .toast { 
+      position: fixed; top: 20px; right: 20px; padding: 12px 20px; 
+      border-radius: 8px; color: white; font-weight: 500; z-index: 1000; 
+      animation: fadeIn 0.3s ease-out; 
+    }
+    .toast-success { background: #22c55e; }
+    .toast-error { background: #ef4444; }
+    .toast-warning { background: #f59e0b; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+  <div class="flex h-screen">
+    <!-- 左侧：间隔 + 实时预览 -->
+    <div class="flex-shrink-0 flex items-center pl-8 pr-6 bg-gray-200">
+      <aside class="w-56 bg-gradient-to-b from-slate-800 to-slate-900 text-white flex flex-col shadow-xl rounded-xl overflow-hidden h-[90vh] max-h-[600px]">
+      <div class="p-4 border-b border-slate-700">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center text-xl">
+            <i class="fas fa-toolbox"></i>
+          </div>
+          <div>
+            <h1 class="font-bold text-lg">实时预览</h1>
+            <p class="text-xs text-slate-400">侧边栏效果</p>
+          </div>
+        </div>
+      </div>
+      
+      <nav class="flex-1 py-4 overflow-y-auto">
+        <div class="px-3 mb-2">
+          <span class="text-xs text-slate-500 uppercase tracking-wider">工具列表</span>
+        </div>
+        <div id="previewNav">
+          <!-- 动态生成 -->
+        </div>
+        
+        <div class="px-3 mt-6 mb-2">
+          <span class="text-xs text-slate-500 uppercase tracking-wider">更多</span>
+        </div>
+        <div class="preview-nav-item flex items-center gap-3 px-4 py-3 text-slate-300">
+          <i class="fas fa-th-large w-5 text-center text-indigo-400"></i>
+          <span>工具管理</span>
+        </div>
+        <div class="preview-nav-item flex items-center gap-3 px-4 py-3 text-slate-300">
+          <i class="fas fa-info-circle w-5 text-center text-slate-400"></i>
+          <span>关于</span>
+        </div>
+      </nav>
+      
+      <div class="p-4 border-t border-slate-700 text-center text-xs text-slate-500">
+        已选 <span id="selectedCount" class="text-blue-400 font-bold">0</span> / 10 个工具
+      </div>
+      </aside>
+    </div>
+
+    <!-- 右侧：管理区域 -->
+    <main class="flex-1 overflow-auto p-6">
+      <div class="max-w-4xl mx-auto">
+        <!-- 头部 -->
+        <div class="flex items-center justify-between mb-6">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">工具管理</h1>
+            <p class="text-sm text-gray-500">选择并排序显示在侧边栏的工具（最多10个）</p>
+          </div>
+          <button onclick="saveConfig()" class="px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm">
+            <i class="fas fa-save mr-2"></i>保存配置
+          </button>
+        </div>
+
+        <!-- 侧边栏工具列表 -->
+        <div class="bg-white rounded-xl shadow-sm mb-6">
+          <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i class="fas fa-bars text-blue-500"></i>
+              <h2 class="font-semibold text-gray-800">侧边栏工具</h2>
+            </div>
+            <span class="text-xs text-gray-400">拖拽调整顺序</span>
+          </div>
+          <div id="sidebarTools" class="p-4 min-h-[120px]"
+            ondragover="onDragOver(event)" 
+            ondrop="onDrop(event)">
+            <!-- 动态生成 -->
+          </div>
+        </div>
+
+        <!-- 可用工具网格 -->
+        <div class="bg-white rounded-xl shadow-sm">
+          <div class="px-5 py-4 border-b border-gray-100 flex items-center gap-2">
+            <i class="fas fa-toolbox text-gray-400"></i>
+            <h2 class="font-semibold text-gray-800">可用工具</h2>
+            <span class="text-xs text-gray-400">点击添加到侧边栏</span>
+          </div>
+          <div id="availableTools" class="p-4">
+            <!-- 动态生成 -->
+          </div>
+        </div>
+
+        <!-- 说明 -->
+        <div class="mt-4 text-xs text-gray-400 flex items-center gap-4">
+          <span><i class="fas fa-info-circle mr-1"></i>拖拽侧边栏工具可调整顺序</span>
+          <span><i class="fas fa-plus-circle mr-1"></i>点击可用工具添加</span>
+          <span><i class="fas fa-times-circle mr-1"></i>点击已选工具移除</span>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const MAX_SIDEBAR_TOOLS = 10;
+    let allTools = [];
+    let sidebarList = [];
+    let draggedIndex = null;
+    let placeholderIndex = null;
+
+    // 初始化
+    document.addEventListener('DOMContentLoaded', loadConfig);
+
+    async function loadConfig() {
+      try {
+        const [allRes, sidebarRes] = await Promise.all([
+          fetch('/api/tools'),
+          fetch('/api/tools/sidebar')
+        ]);
+        const allData = await allRes.json();
+        const sidebarData = await sidebarRes.json();
+        
+        allTools = allData.data || [];
+        sidebarList = sidebarData.data.sidebar || [];
+        
+        render();
+      } catch (err) {
+        showToast('加载失败: ' + err.message, 'error');
+      }
+    }
+
+    function render() {
+      renderSidebarTools();
+      renderAvailableTools();
+      renderPreview();
+      document.getElementById('selectedCount').textContent = sidebarList.length;
+    }
+
+    // 渲染侧边栏工具
+    function renderSidebarTools() {
+      const container = document.getElementById('sidebarTools');
+      const tools = sidebarList.map(id => allTools.find(t => t.id === id)).filter(Boolean);
+      
+      if (tools.length === 0) {
+        container.innerHTML = `
+          <div class="flex flex-col items-center justify-center py-8 text-gray-400">
+            <i class="fas fa-inbox text-3xl mb-2 opacity-50"></i>
+            <p class="text-sm">点击下方工具添加到这里</p>
+          </div>
+        `;
+        return;
+      }
+      
+      container.innerHTML = tools.map((tool, index) => `
+        <div class="sidebar-card flex items-center gap-3 p-3 bg-gray-50 rounded-lg mb-2 border border-gray-100"
+          draggable="true"
+          data-index="${index}"
+          data-id="${tool.id}"
+          ondragstart="onDragStart(event, ${index})"
+          ondragend="onDragEnd(event)">
+          <i class="fas fa-grip-vertical text-gray-300 cursor-grab"></i>
+          <div class="w-9 h-9 bg-${tool.color}-100 rounded-lg flex items-center justify-center flex-shrink-0">
+            <i class="fas ${tool.icon} text-${tool.color}-500"></i>
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="font-medium text-gray-800 text-sm">${tool.name}</div>
+            <div class="text-xs text-gray-400 truncate">${tool.desc}</div>
+          </div>
+          <button onclick="removeTool('${tool.id}')" class="p-2 text-gray-300 hover:text-red-500 transition-colors" title="移除">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      `).join('');
+    }
+
+    // 渲染可用工具（小方格）
+    function renderAvailableTools() {
+      const container = document.getElementById('availableTools');
+      
+      container.innerHTML = `
+        <div class="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3">
+          ${allTools.map(tool => {
+            const inSidebar = sidebarList.includes(tool.id);
+            return `
+              <div class="tool-grid-item flex flex-col items-center p-3 bg-gray-50 rounded-xl border border-gray-100 ${inSidebar ? 'in-sidebar' : ''}"
+                onclick="${inSidebar ? '' : `addTool('${tool.id}')`}"
+                title="${tool.name}${inSidebar ? ' (已添加)' : ''}">
+                <div class="w-10 h-10 bg-${tool.color}-100 rounded-xl flex items-center justify-center mb-2">
+                  <i class="fas ${tool.icon} text-${tool.color}-500 text-lg"></i>
+                </div>
+                <span class="text-xs text-gray-600 text-center truncate w-full">${tool.name}</span>
+                ${inSidebar ? '<i class="fas fa-check text-green-500 text-xs mt-1"></i>' : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+
+    // 渲染预览
+    function renderPreview() {
+      const container = document.getElementById('previewNav');
+      const tools = sidebarList.map(id => allTools.find(t => t.id === id)).filter(Boolean);
+      
+      if (tools.length === 0) {
+        container.innerHTML = '<div class="px-4 py-3 text-slate-500 text-sm">暂无工具</div>';
+        return;
+      }
+      
+      container.innerHTML = tools.map(tool => `
+        <div class="preview-nav-item flex items-center gap-3 px-4 py-3 text-slate-300">
+          <i class="fas ${tool.icon} w-5 text-center text-${tool.color}-400"></i>
+          <span>${tool.name}</span>
+        </div>
+      `).join('');
+    }
+
+    // 添加工具
+    function addTool(id) {
+      if (sidebarList.includes(id)) return;
+      if (sidebarList.length >= MAX_SIDEBAR_TOOLS) {
+        showToast(`最多只能添加 ${MAX_SIDEBAR_TOOLS} 个工具`, 'warning');
+        return;
+      }
+      sidebarList.push(id);
+      render();
+    }
+
+    // 移除工具
+    function removeTool(id) {
+      sidebarList = sidebarList.filter(t => t !== id);
+      render();
+    }
+
+    // 拖拽开始
+    function onDragStart(e, index) {
+      draggedIndex = index;
+      e.target.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      // 延迟添加样式，避免立即消失
+      setTimeout(() => {
+        e.target.style.opacity = '0.4';
+      }, 0);
+    }
+
+    // 拖拽结束
+    function onDragEnd(e) {
+      e.target.classList.remove('dragging');
+      e.target.style.opacity = '1';
+      draggedIndex = null;
+      placeholderIndex = null;
+      render(); // 重新渲染移除占位符
+    }
+
+    // 拖拽经过
+    function onDragOver(e) {
+      e.preventDefault();
+      if (draggedIndex === null) return;
+      
+      const container = document.getElementById('sidebarTools');
+      const cards = [...container.querySelectorAll('.sidebar-card:not(.dragging)')];
+      
+      // 找到鼠标位置应该插入的索引
+      let newIndex = cards.length;
+      for (let i = 0; i < cards.length; i++) {
+        const rect = cards[i].getBoundingClientRect();
+        if (e.clientY < rect.top + rect.height / 2) {
+          newIndex = parseInt(cards[i].dataset.index);
+          if (newIndex > draggedIndex) newIndex--;
+          break;
+        }
+      }
+      
+      // 如果位置变化，更新占位符
+      if (placeholderIndex !== newIndex) {
+        placeholderIndex = newIndex;
+        updatePlaceholder();
+      }
+    }
+
+    // 更新占位符显示
+    function updatePlaceholder() {
+      // 移除旧占位符
+      document.querySelectorAll('.drag-placeholder').forEach(el => el.remove());
+      
+      if (draggedIndex === null || placeholderIndex === null) return;
+      
+      const container = document.getElementById('sidebarTools');
+      const cards = [...container.querySelectorAll('.sidebar-card')];
+      const placeholder = document.createElement('div');
+      placeholder.className = 'drag-placeholder';
+      
+      // 计算实际插入位置
+      let insertIndex = placeholderIndex;
+      if (draggedIndex < placeholderIndex) insertIndex++;
+      
+      if (insertIndex >= cards.length) {
+        container.appendChild(placeholder);
+      } else {
+        container.insertBefore(placeholder, cards[insertIndex]);
+      }
+    }
+
+    // 放置
+    function onDrop(e) {
+      e.preventDefault();
+      if (draggedIndex === null || placeholderIndex === null) return;
+      
+      // 重新排序
+      const item = sidebarList[draggedIndex];
+      sidebarList.splice(draggedIndex, 1);
+      sidebarList.splice(placeholderIndex, 0, item);
+      
+      draggedIndex = null;
+      placeholderIndex = null;
+      render();
+    }
+
+    // 保存配置
+    async function saveConfig() {
+      try {
+        const res = await fetch('/api/tools/sidebar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sidebar: sidebarList })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('配置已保存', 'success');
+        } else {
+          throw new Error(data.message);
+        }
+      } catch (err) {
+        showToast('保存失败: ' + err.message, 'error');
+      }
+    }
+
+    // Toast
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      const icons = { success: 'check-circle', error: 'exclamation-circle', warning: 'exclamation-triangle' };
+      toast.innerHTML = `<i class="fas fa-${icons[type] || 'info-circle'} mr-2"></i>${message}`;
+      document.body.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-20px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 2500);
+    }
+    
+    // 显示页面
+    document.body.classList.add('ready');
+  </script>
+</body>
+</html>

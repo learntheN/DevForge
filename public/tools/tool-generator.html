@@ -1,0 +1,1569 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI 工具生成</title>
+  <script src="/assets/js/tailwind.js"></script>
+  <link rel="stylesheet" href="/assets/css/fontawesome.min.css">
+  <style>
+    body { opacity: 0; transition: opacity 0.1s; }
+    body.ready { opacity: 1; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; font-weight: 500; z-index: 1000; animation: fadeIn 0.3s ease-out; }
+    .toast-success { background: #22c55e; }
+    .toast-error { background: #ef4444; }
+    .toast-info { background: #3b82f6; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    
+    .message { animation: slideIn 0.3s ease-out; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: translateX(0); } }
+    
+    pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
+    .code-block { background: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: 0.5rem; font-family: 'Consolas', 'Monaco', monospace; font-size: 0.875rem; overflow: auto; }
+    
+    /* 语法高亮样式 */
+    .hl-tag { color: #f472b6; }
+    .hl-attr { color: #a5b4fc; }
+    .hl-string { color: #86efac; }
+    .hl-comment { color: #6b7280; font-style: italic; }
+    .hl-doctype { color: #fbbf24; }
+    .hl-keyword { color: #c084fc; }
+    .hl-function { color: #60a5fa; }
+    .hl-number { color: #f97316; }
+    .hl-operator { color: #94a3b8; }
+    
+    .thinking { display: inline-flex; gap: 4px; }
+    .thinking span { width: 8px; height: 8px; background: #6366f1; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out both; }
+    .thinking span:nth-child(1) { animation-delay: -0.32s; }
+    .thinking span:nth-child(2) { animation-delay: -0.16s; }
+    @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+    
+    .task-item { transition: background 0.15s; }
+    .task-item:hover { background: #f8fafc; }
+    .task-item.active { background: #eff6ff; border-left: 3px solid #3b82f6; }
+    
+    .status-pending { color: #9ca3af; }
+    .status-generating { color: #f59e0b; }
+    .status-completed { color: #22c55e; }
+    .status-adopted { color: #3b82f6; }
+    .status-failed { color: #ef4444; }
+  </style>
+</head>
+<body class="bg-gray-50 h-screen flex">
+  <!-- 左侧任务列表 -->
+  <aside class="w-72 bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+    <div class="p-4 border-b border-gray-200 flex items-center justify-between">
+      <h2 class="font-bold text-gray-800"><i class="fas fa-tasks mr-2 text-purple-500"></i>任务列表</h2>
+      <button onclick="createTask()" class="px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700">
+        <i class="fas fa-plus mr-1"></i>新建
+      </button>
+    </div>
+    <div class="flex-1 overflow-auto" id="taskList">
+      <!-- 任务列表 -->
+    </div>
+    <div class="p-3 border-t border-gray-200">
+      <button onclick="showSettings()" class="w-full px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm">
+        <i class="fas fa-cog mr-2"></i>AI 配置
+      </button>
+    </div>
+  </aside>
+
+  <!-- 右侧主区域 -->
+  <main class="flex-1 flex flex-col overflow-hidden">
+    <!-- 当前任务头部 -->
+    <header class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between flex-shrink-0">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl flex items-center justify-center text-white text-xl">
+          <i class="fas fa-magic"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-gray-900" id="currentTaskName">选择或创建任务</h1>
+          <p class="text-xs text-gray-500" id="currentTaskStatus">-</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2" id="taskActions" style="display:none;">
+        <button onclick="deleteCurrentTask()" class="px-3 py-2 text-red-500 hover:bg-red-50 rounded-lg" title="删除任务">
+          <i class="fas fa-trash-alt"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- 无任务提示 -->
+    <div id="noTaskView" class="flex-1 flex items-center justify-center">
+      <div class="text-center text-gray-400">
+        <i class="fas fa-inbox text-5xl mb-4 opacity-30"></i>
+        <p class="text-lg">请创建或选择一个任务</p>
+        <p class="text-sm mt-2">点击左上角「新建」开始</p>
+      </div>
+    </div>
+
+    <!-- 任务工作区 -->
+    <div id="taskWorkspace" class="flex-1 flex overflow-hidden" style="display:none;">
+      <!-- 对话区 -->
+      <div class="flex-1 flex flex-col border-r border-gray-200">
+        <div class="flex-1 overflow-auto p-4" id="chatContainer">
+          <div class="space-y-4" id="messageList"></div>
+        </div>
+        
+        <div class="p-4 border-t border-gray-200 bg-white">
+          <div class="flex gap-2">
+            <textarea id="inputBox" rows="2" placeholder="描述你想要的工具功能... (Enter 发送)"
+              class="flex-1 px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+              onkeydown="handleKeyDown(event)"></textarea>
+            <button onclick="sendMessage()" id="sendBtn" 
+              class="px-4 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50">
+              <i class="fas fa-paper-plane"></i>
+            </button>
+          </div>
+          <p class="text-xs text-gray-400 mt-2"><i class="fas fa-shield-alt mr-1"></i>生成的工具代码独立运行，不会修改主程序</p>
+        </div>
+      </div>
+
+      <!-- 预览/代码区 -->
+      <div class="w-1/2 flex flex-col bg-gray-100">
+        <div class="flex bg-white border-b border-gray-200">
+          <button onclick="switchTab('code')" id="tabCode" class="flex-1 px-4 py-2 text-sm font-medium border-b-2 border-purple-500 text-purple-600">
+            <i class="fas fa-code mr-1"></i>代码
+          </button>
+          <button onclick="switchTab('info')" id="tabInfo" class="flex-1 px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700">
+            <i class="fas fa-info-circle mr-1"></i>信息
+          </button>
+          <button onclick="switchTab('logs')" id="tabLogs" class="flex-1 px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700">
+            <i class="fas fa-terminal mr-1"></i>日志
+          </button>
+        </div>
+        
+        <!-- 隐藏的预览 iframe，仅用于后台验证 -->
+        <iframe id="previewFrame" class="hidden" srcdoc=""></iframe>
+        
+        <div class="flex-1 overflow-auto">
+          <div id="panelCode" class="p-4">
+            <pre id="codeContent" class="code-block overflow-auto">// 等待生成...</pre>
+          </div>
+          <div id="panelInfo" class="h-full p-4 hidden">
+            <div class="bg-white rounded-xl p-6 shadow-sm">
+              <h3 class="font-bold text-gray-900 mb-4">工具信息</h3>
+              <div id="toolInfoContent" class="space-y-3">
+                <p class="text-gray-500 text-center py-8">暂无生成的工具</p>
+              </div>
+            </div>
+          </div>
+          <div id="panelLogs" class="h-full p-4 hidden flex flex-col">
+            <div class="bg-white rounded-xl shadow-sm flex-1 flex flex-col overflow-hidden">
+              <!-- 日志头部 -->
+              <div class="px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="font-bold text-gray-900"><i class="fas fa-terminal text-purple-500 mr-2"></i>执行日志</h3>
+                <div class="flex gap-2">
+                  <button onclick="clearLogs()" class="px-3 py-1 text-sm text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-trash-alt mr-1"></i>清空
+                  </button>
+                  <button onclick="downloadLogs()" class="px-3 py-1 text-sm bg-purple-100 text-purple-700 rounded hover:bg-purple-200">
+                    <i class="fas fa-download mr-1"></i>下载
+                  </button>
+                </div>
+              </div>
+              <!-- 日志内容 -->
+              <div id="logsContent" class="flex-1 overflow-auto p-4 font-mono text-sm bg-gray-900 text-gray-100">
+                <div class="text-gray-500 text-center py-8">等待执行...</div>
+              </div>
+              <!-- 文件路径信息 -->
+              <div id="pathInfo" class="px-4 py-3 border-t border-gray-200 bg-gray-50 text-sm hidden">
+                <div class="grid grid-cols-2 gap-2">
+                  <div><span class="text-gray-500">代码路径:</span> <span id="codePath" class="text-gray-700 font-mono">-</span></div>
+                  <div><span class="text-gray-500">数据路径:</span> <span id="dataPath" class="text-gray-700 font-mono">-</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 操作栏 -->
+        <div class="p-4 bg-white border-t border-gray-200">
+          <!-- 验证状态栏 -->
+          <div id="validationStatus" class="mb-3 p-3 bg-gray-50 rounded-lg hidden">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm font-medium text-gray-700"><i class="fas fa-clipboard-check mr-2"></i>验证状态</span>
+              <span id="validationSummary" class="text-xs text-gray-500">等待验证...</span>
+            </div>
+            <div class="flex gap-4 text-xs">
+              <div id="statusHtml" class="flex items-center gap-1">
+                <i class="fas fa-circle text-gray-300"></i>
+                <span>HTML 语法</span>
+              </div>
+              <div id="statusJs" class="flex items-center gap-1">
+                <i class="fas fa-circle text-gray-300"></i>
+                <span>JS 运行</span>
+              </div>
+              <div id="statusFunc" class="flex items-center gap-1">
+                <i class="fas fa-circle text-gray-300"></i>
+                <span>功能可用</span>
+              </div>
+              <div id="statusReview" class="flex items-center gap-1">
+                <i class="fas fa-circle text-gray-300"></i>
+                <span>LLM 审核</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="regenerate()" id="btnRegenerate" class="flex-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50" disabled>
+              <i class="fas fa-redo mr-2"></i>重新生成
+            </button>
+            <button onclick="openPreviewPage()" id="btnPreview" class="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50" disabled>
+              <i class="fas fa-external-link-alt mr-2"></i>预览
+            </button>
+            <button onclick="adoptTask()" id="btnAdopt" class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50" disabled>
+              <i class="fas fa-check mr-2"></i>采纳并部署
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 设置弹窗 -->
+  <div id="settingsModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-lg m-4">
+      <div class="p-6">
+        <h3 class="text-lg font-bold text-gray-900 mb-4"><i class="fas fa-cog mr-2"></i>AI 配置</h3>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">API Endpoint</label>
+            <input type="text" id="apiEndpoint" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="https://api.deepseek.com/v1/chat/completions">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+            <input type="password" id="apiKey" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="sk-...">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">模型</label>
+            <input type="text" id="apiModel" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="deepseek-chat">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Temperature</label>
+            <input type="number" id="apiTemp" class="w-full px-3 py-2 border border-gray-300 rounded-lg" value="1.5" min="0" max="2" step="0.1">
+          </div>
+        </div>
+        <div class="flex gap-3 mt-6">
+          <button onclick="closeSettings()" class="flex-1 px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">取消</button>
+          <button onclick="testApi()" class="px-4 py-2 text-purple-600 bg-purple-50 rounded-lg hover:bg-purple-100">
+            <i class="fas fa-plug mr-1"></i>测试
+          </button>
+          <button onclick="saveSettings()" class="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新建任务弹窗 -->
+  <div id="newTaskModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md m-4">
+      <div class="p-6">
+        <h3 class="text-lg font-bold text-gray-900 mb-4"><i class="fas fa-plus mr-2"></i>新建任务</h3>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">任务名称</label>
+            <input type="text" id="newTaskName" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="例如：颜色选择器工具">
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">需求描述（可选）</label>
+            <textarea id="newTaskDesc" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="简要描述你需要的工具功能..."></textarea>
+          </div>
+        </div>
+        <div class="flex gap-3 mt-6">
+          <button onclick="closeNewTaskModal()" class="flex-1 px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">取消</button>
+          <button onclick="confirmCreateTask()" class="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700">创建</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let config = {};
+    let tasks = [];
+    let currentTask = null;
+    let isLoading = false;
+    let taskLogs = {}; // 任务日志 { taskId: [{time, event, message, data}] }
+
+    const statusLabels = {
+      pending: '待处理',
+      generating: '生成中',
+      completed: '已完成',
+      adopted: '已采纳',
+      failed: '失败'
+    };
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await Promise.all([loadConfig(), loadTasks()]);
+      document.body.classList.add('ready');
+    });
+
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/ai/config');
+        const data = await res.json();
+        if (data.success) config = data.data;
+      } catch (err) { console.error(err); }
+    }
+
+    async function loadTasks() {
+      try {
+        const res = await fetch('/api/ai/tasks');
+        const data = await res.json();
+        if (data.success) {
+          tasks = data.data;
+          renderTaskList();
+          
+          // 恢复上次选中的任务
+          const lastTaskId = localStorage.getItem('ai-generator-current-task');
+          if (lastTaskId && tasks.find(t => t.id === lastTaskId)) {
+            selectTask(lastTaskId);
+          }
+        }
+      } catch (err) { console.error(err); }
+    }
+
+    function renderTaskList() {
+      const container = document.getElementById('taskList');
+      if (tasks.length === 0) {
+        container.innerHTML = `<div class="p-4 text-center text-gray-400 text-sm">暂无任务</div>`;
+        return;
+      }
+      container.innerHTML = tasks.map(task => {
+        // 已采纳的任务显示版本号
+        const statusText = task.status === 'adopted' && task.adoptedVersion 
+          ? `${statusLabels[task.status]} (v${task.adoptedVersion})`
+          : statusLabels[task.status];
+        return `
+        <div class="task-item p-3 cursor-pointer border-b border-gray-100 ${currentTask?.id === task.id ? 'active' : ''}" onclick="selectTask('${task.id}')">
+          <div class="flex items-center justify-between">
+            <span class="font-medium text-gray-800 truncate">${task.name}</span>
+            <span class="status-${task.status} text-xs"><i class="fas fa-${getStatusIcon(task.status)} mr-1"></i>${statusText}</span>
+          </div>
+          <p class="text-xs text-gray-400 mt-1">${formatTime(task.createdAt)}</p>
+        </div>
+      `;
+      }).join('');
+    }
+
+    function getStatusIcon(status) {
+      return { pending: 'clock', generating: 'spinner fa-spin', completed: 'check-circle', adopted: 'rocket', failed: 'times-circle' }[status] || 'circle';
+    }
+
+    function formatTime(iso) {
+      return new Date(iso).toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    async function selectTask(taskId) {
+      currentTask = tasks.find(t => t.id === taskId);
+      if (!currentTask) return;
+      
+      // 保存当前任务 ID
+      localStorage.setItem('ai-generator-current-task', taskId);
+      
+      // 加载日志（从独立文件）
+      await loadTaskLogs(taskId);
+      
+      // 如果任务状态是 'generating' 但页面刷新了，说明生成被中断
+      if (currentTask.status === 'generating') {
+        if (!taskLogs[taskId]) taskLogs[taskId] = [];
+        taskLogs[taskId].push({
+          time: new Date().toISOString(),
+          event: 'interrupted',
+          message: '⚠️ 上次生成被中断，请重新发送消息继续'
+        });
+      }
+      
+      renderTaskList();
+      document.getElementById('noTaskView').style.display = 'none';
+      document.getElementById('taskWorkspace').style.display = 'flex';
+      document.getElementById('taskActions').style.display = 'flex';
+      
+      document.getElementById('currentTaskName').textContent = currentTask.name;
+      // 已采纳的任务显示版本号
+      const statusText = currentTask.status === 'adopted' && currentTask.adoptedVersion
+        ? `${statusLabels[currentTask.status]} (v${currentTask.adoptedVersion})`
+        : statusLabels[currentTask.status];
+      document.getElementById('currentTaskStatus').textContent = statusText;
+      
+      // 渲染消息
+      renderMessages();
+      
+      // 重置验证状态
+      resetValidationStatus();
+      
+      // 更新预览和代码
+      if (currentTask.generatedCode || currentTask.previewPath) {
+        // 使用新的预览 API 路径
+        const previewPath = `/api/ai/previews/${currentTask.id}/latest`;
+        loadPreview(currentTask.id, previewPath);
+        
+        // 从预览文件读取完整代码（避免 JSON 截断问题）
+        loadCodeFromFile(previewPath);
+        
+        updateToolInfo();
+        document.getElementById('btnRegenerate').disabled = false;
+        document.getElementById('btnPreview').disabled = currentTask.status !== 'completed';
+        document.getElementById('btnAdopt').disabled = currentTask.status !== 'completed';
+      } else {
+        // 清空隐藏的预览 iframe
+        document.getElementById('previewFrame').srcdoc = '';
+        setCodeContent(null);
+        document.getElementById('toolInfoContent').innerHTML = '<p class="text-gray-500 text-center py-8">暂无生成的工具</p>';
+        document.getElementById('btnRegenerate').disabled = true;
+        document.getElementById('btnPreview').disabled = true;
+        document.getElementById('btnAdopt').disabled = true;
+      }
+      
+      // 更新日志和路径信息
+      renderLogs();
+      updatePathInfo();
+    }
+
+    function renderMessages() {
+      const container = document.getElementById('messageList');
+      if (!currentTask || currentTask.messages.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-8 text-gray-400">
+            <i class="fas fa-comment-dots text-3xl mb-3 opacity-30"></i>
+            <p>开始对话，描述你想要的工具</p>
+          </div>
+        `;
+        return;
+      }
+      container.innerHTML = currentTask.messages.map(msg => {
+        const isUser = msg.role === 'user';
+        let content = msg.content;
+        
+        // AI 消息简化显示（不显示代码）
+        if (!isUser) {
+          // 尝试解析 JSON 格式
+          try {
+            const json = extractJSON(content);
+            if (json?.tool) {
+              content = `✅ <strong>${json.tool.name}</strong> 已生成<br><small class="text-gray-500">查看预览和代码 Tab</small>`;
+            } else {
+              // 移除代码块，只保留文字说明
+              content = content.replace(/```[\s\S]*?```/g, '[代码已生成，请查看代码 Tab]');
+              // 如果内容太长，截断
+              if (content.length > 300) {
+                content = content.substring(0, 300) + '...';
+              }
+            }
+          } catch (e) {
+            // 移除代码块
+            content = content.replace(/```[\s\S]*?```/g, '[代码已生成]');
+            if (content.length > 300) content = content.substring(0, 300) + '...';
+          }
+        }
+        
+        return `
+          <div class="message flex ${isUser ? 'justify-end' : 'justify-start'}">
+            <div class="max-w-[85%] ${isUser ? 'bg-purple-600 text-white' : 'bg-white'} px-4 py-3 rounded-2xl shadow-sm">
+              <div class="text-sm ${isUser ? '' : 'text-gray-700'}">${content}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function updateToolInfo() {
+      if (!currentTask?.generatedTool) return;
+      const tool = currentTask.generatedTool;
+      const version = currentTask.adoptedVersion;
+      const versionBadge = version 
+        ? `<span class="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full">v${version}</span>`
+        : currentTask.status === 'completed' 
+          ? `<span class="ml-2 px-2 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded-full">待部署</span>`
+          : '';
+      
+      document.getElementById('toolInfoContent').innerHTML = `
+        <div class="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+          <div class="w-10 h-10 bg-${tool.color || 'gray'}-100 rounded-lg flex items-center justify-center">
+            <i class="fas ${tool.icon || 'fa-tools'} text-${tool.color || 'gray'}-500"></i>
+          </div>
+          <div class="flex-1">
+            <p class="font-medium">${tool.name || '未命名工具'}${versionBadge}</p>
+            <p class="text-sm text-gray-500">${tool.id || '-'}</p>
+          </div>
+        </div>
+        <div class="space-y-2 text-sm mt-4">
+          <p><span class="text-gray-500">图标:</span> ${tool.icon || '无'}</p>
+          <p><span class="text-gray-500">颜色:</span> ${tool.color || '无'}</p>
+          <p><span class="text-gray-500">描述:</span> ${tool.desc || '无描述'}</p>
+          ${version ? `<p><span class="text-gray-500">部署版本:</span> <span class="font-medium text-green-600">v${version}</span></p>` : ''}
+        </div>
+      `;
+    }
+
+    function createTask() {
+      document.getElementById('newTaskName').value = '';
+      document.getElementById('newTaskDesc').value = '';
+      document.getElementById('newTaskModal').classList.remove('hidden');
+      document.getElementById('newTaskModal').classList.add('flex');
+      document.getElementById('newTaskName').focus();
+    }
+
+    function closeNewTaskModal() {
+      document.getElementById('newTaskModal').classList.add('hidden');
+      document.getElementById('newTaskModal').classList.remove('flex');
+    }
+
+    async function confirmCreateTask() {
+      const name = document.getElementById('newTaskName').value.trim();
+      if (!name) { showToast('请输入任务名称', 'error'); return; }
+      
+      try {
+        const res = await fetch('/api/ai/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            name, 
+            description: document.getElementById('newTaskDesc').value.trim() 
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          tasks.unshift(data.data);
+          renderTaskList();
+          selectTask(data.data.id);
+          closeNewTaskModal();
+          showToast('任务已创建', 'success');
+        } else {
+          showToast(data.message, 'error');
+        }
+      } catch (err) {
+        showToast('创建失败: ' + err.message, 'error');
+      }
+    }
+
+    async function deleteCurrentTask() {
+      if (!currentTask) return;
+      
+      // 检查是否有已部署的工具
+      const hasDeployedTool = currentTask.status === 'adopted' && currentTask.generatedTool?.id;
+      const toolName = currentTask.generatedTool?.name || '';
+      
+      // 第一次确认
+      let confirmMsg = `确定删除任务「${currentTask.name}」？`;
+      if (hasDeployedTool) {
+        confirmMsg += `\n\n⚠️ 该任务已部署工具「${toolName}」，删除任务将同时删除已部署的工具文件！`;
+      }
+      
+      if (!confirm(confirmMsg)) return;
+      
+      // 第二次确认（双重确认）
+      const secondConfirm = hasDeployedTool 
+        ? `再次确认：删除任务将永久删除已部署的工具「${toolName}」，此操作不可恢复！\n\n输入 "确认删除" 继续：`
+        : `再次确认删除任务「${currentTask.name}」？`;
+      
+      if (hasDeployedTool) {
+        const input = prompt(secondConfirm);
+        if (input !== '确认删除') {
+          showToast('已取消删除', 'info');
+          return;
+        }
+      } else {
+        if (!confirm(secondConfirm)) return;
+      }
+      
+      try {
+        const res = await fetch(`/api/ai/tasks/${currentTask.id}`, { method: 'DELETE' });
+        const data = await res.json();
+        
+        if (data.success) {
+          tasks = tasks.filter(t => t.id !== currentTask.id);
+          currentTask = null;
+          renderTaskList();
+          document.getElementById('noTaskView').style.display = 'flex';
+          document.getElementById('taskWorkspace').style.display = 'none';
+          document.getElementById('taskActions').style.display = 'none';
+          
+          const msg = data.deletedTool 
+            ? `任务和工具「${data.deletedTool}」已删除` 
+            : '任务已删除';
+          showToast(msg, 'success');
+        } else {
+          showToast(data.message || '删除失败', 'error');
+        }
+      } catch (err) {
+        showToast('删除失败: ' + err.message, 'error');
+      }
+    }
+
+    function handleKeyDown(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    }
+
+    async function sendMessage() {
+      if (!currentTask || isLoading) return;
+      
+      const input = document.getElementById('inputBox');
+      const content = input.value.trim();
+      if (!content) return;
+
+      if (!config.hasApiKey) {
+        showToast('请先配置 API Key', 'error');
+        showSettings();
+        return;
+      }
+
+      // 清空预览 iframe（用于后台验证）
+      const previewFrame = document.getElementById('previewFrame');
+      previewFrame.src = '';
+      previewFrame.srcdoc = '';
+      
+      // 重置验证状态
+      resetValidationStatus();
+      
+      // 禁用按钮
+      document.getElementById('btnPreview').disabled = true;
+      document.getElementById('btnAdopt').disabled = true;
+
+      // 添加用户消息
+      currentTask.messages.push({ role: 'user', content });
+      renderMessages();
+      input.value = '';
+
+      // 更新状态
+      currentTask.status = 'generating';
+      await updateTask({ status: 'generating', messages: currentTask.messages });
+      renderTaskList();
+      document.getElementById('currentTaskStatus').textContent = '生成中...';
+
+      isLoading = true;
+      document.getElementById('sendBtn').disabled = true;
+      
+      // 显示加载 - Agent 处理中 (流式更新)
+      const thinkingDiv = document.createElement('div');
+      thinkingDiv.className = 'message flex justify-start';
+      thinkingDiv.id = 'thinking';
+      thinkingDiv.innerHTML = `
+        <div class="bg-white px-4 py-3 rounded-2xl shadow-sm min-w-[200px]">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="thinking"><span></span><span></span><span></span></div>
+            <span class="text-sm text-gray-600 font-medium" id="agentStatus">正在启动 Agent...</span>
+          </div>
+          <div id="agentSteps" class="text-xs text-gray-400 space-y-1"></div>
+        </div>
+      `;
+      document.getElementById('messageList').appendChild(thinkingDiv);
+      document.getElementById('messageList').scrollTop = document.getElementById('messageList').scrollHeight;
+
+      try {
+        // 使用流式 SSE 接口调用 Agent
+        const res = await fetch('/api/agent/run/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            taskId: currentTask.id,
+            message: content
+          })
+        });
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalResult = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              // 事件类型行，跳过（data 行会包含完整信息）
+            } else if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                // 确保 data.event 存在才处理
+                if (data && data.event) {
+                  handleAgentEvent(data);
+                  if (data.event === 'complete' || data.event === 'final_response') {
+                    finalResult = data;
+                  }
+                }
+              } catch (e) { /* ignore parse errors */ }
+            }
+          }
+        }
+
+        document.getElementById('thinking')?.remove();
+
+        // 处理最终结果
+        if (finalResult && finalResult.success !== false) {
+          // 添加 Agent 响应
+          if (finalResult.content) {
+            currentTask.messages.push({ role: 'assistant', content: finalResult.content });
+          }
+          
+          // 如果 Agent 返回了生成的工具
+          if (finalResult.tool && finalResult.code) {
+            currentTask.generatedTool = finalResult.tool;
+            currentTask.generatedCode = finalResult.code;
+            currentTask.previewPath = finalResult.previewPath; // 记录预览路径
+            currentTask.status = 'completed';
+            
+            // 使用真实文件预览（优先）或 srcdoc 回退
+            loadPreview(currentTask.id, finalResult.previewPath);
+            
+            const normalizedCode = normalizeCode(finalResult.code);
+            setCodeContent(normalizedCode);
+            updateToolInfo();
+            document.getElementById('btnRegenerate').disabled = false;
+            document.getElementById('btnPreview').disabled = false;
+            document.getElementById('btnAdopt').disabled = false;
+            
+            showToast('Agent 已生成工具！查看验证状态后可采纳部署', 'success');
+          } else if (finalResult.content) {
+            // 尝试从内容中解析
+            try {
+              const json = extractJSON(finalResult.content);
+              if (json?.tool && json?.html) {
+                currentTask.generatedTool = json.tool;
+                currentTask.generatedCode = json.html;
+                currentTask.status = 'completed';
+                
+                // 无预览路径时使用 srcdoc
+                const normalizedCode = normalizeCode(json.html);
+                document.getElementById('previewFrame').srcdoc = normalizedCode;
+                setCodeContent(normalizedCode);
+                updateToolInfo();
+                document.getElementById('btnRegenerate').disabled = false;
+                document.getElementById('btnPreview').disabled = false;
+                document.getElementById('btnAdopt').disabled = false;
+                
+                showToast('工具生成成功！审核后可采纳部署', 'success');
+              } else {
+                currentTask.status = 'pending';
+              }
+            } catch (e) {
+              currentTask.status = 'pending';
+            }
+          }
+          
+          await updateTask({
+            status: currentTask.status,
+            messages: currentTask.messages,
+            generatedTool: currentTask.generatedTool,
+            generatedCode: currentTask.generatedCode,
+            previewPath: currentTask.previewPath
+          });
+          
+          renderMessages();
+          renderTaskList();
+          document.getElementById('currentTaskStatus').textContent = statusLabels[currentTask.status];
+        } else {
+          const errorMsg = finalResult?.error || '未知错误';
+          showToast('Agent 处理失败: ' + errorMsg, 'error');
+          currentTask.status = 'failed';
+          await updateTask({ status: 'failed' });
+          renderTaskList();
+          document.getElementById('currentTaskStatus').textContent = '失败';
+        }
+      } catch (err) {
+        document.getElementById('thinking')?.remove();
+        showToast('请求失败: ' + err.message, 'error');
+        currentTask.status = 'failed';
+        await updateTask({ status: 'failed' });
+        renderTaskList();
+      }
+
+      // 保存日志到任务数据（持久化）
+      if (currentTask && taskLogs[currentTask.id]) {
+        currentTask.logs = taskLogs[currentTask.id];
+        await updateTask({ logs: currentTask.logs });
+        updatePathInfo();
+      }
+
+      isLoading = false;
+      document.getElementById('sendBtn').disabled = false;
+    }
+
+    // 时间追踪
+    let taskStartTime = null;
+    let toolStartTimes = {};
+    let toolChain = []; // 工具调用链
+    let currentPlan = null; // 当前计划
+
+    // 处理 Agent SSE 事件
+    function handleAgentEvent(data) {
+      const statusEl = document.getElementById('agentStatus');
+      const stepsEl = document.getElementById('agentSteps');
+      if (!statusEl || !stepsEl) return;
+
+      const now = Date.now();
+      let duration = '';
+      
+      // 记录任务开始时间
+      if (data.event === 'user_input' || data.event === 'start') {
+        taskStartTime = now;
+        toolChain = [];
+        currentPlan = null;
+      }
+      
+      // 处理阶段变更事件
+      if (data.event === 'phase_change') {
+        handlePhaseChange(data);
+      }
+      
+      // 记录工具调用开始时间
+      if (data.event === 'tool_call') {
+        toolStartTimes[data.tool] = now;
+      }
+      
+      // 计算工具执行耗时
+      if (data.event === 'tool_result' && toolStartTimes[data.tool]) {
+        const elapsed = now - toolStartTimes[data.tool];
+        duration = formatDuration(elapsed);
+        
+        // 记录到工具链
+        toolChain.push({
+          tool: data.tool,
+          success: data.success,
+          duration: elapsed
+        });
+        
+        delete toolStartTimes[data.tool];
+      }
+
+      // 事件标签映射
+      const eventLabels = {
+        user_input: '📝 接收输入',
+        thinking: `🤔 推理中 (${data.iteration || 1})`,
+        llm_call: `🧠 调用 LLM`,
+        tool_call: `🔧 ${data.tool}`,
+        tool_result: data.success ? `✓ ${data.tool}` : `✗ ${data.tool}`,
+        phase_change: `📍 ${data.message || data.phase}`,
+        final_response: '✅ 完成',
+        complete: '✅ 完成',
+        error: `❌ ${data.content || data.error || '错误'}`
+      };
+
+      const label = eventLabels[data.event] || data.event;
+      
+      // 计算总耗时
+      let totalDuration = '';
+      if ((data.event === 'complete' || data.event === 'final_response') && taskStartTime) {
+        totalDuration = formatDuration(now - taskStartTime);
+      }
+      
+      statusEl.textContent = label + (totalDuration ? ` (总耗时 ${totalDuration})` : '');
+
+      // 记录到日志（带耗时）
+      addLog(data.event, label, { ...data, duration: duration || undefined });
+
+      // 处理验证相关事件，更新验证状态
+      if (data.event === 'tool_result') {
+        handleValidationEvent(data);
+      }
+      
+      // 处理预览文件写入事件，加载预览
+      if (data.event === 'tool_result' && data.tool === 'write_preview_file' && data.success && data.result?.previewPath) {
+        loadPreview(currentTask?.id, data.result.previewPath);
+      }
+
+      // 对话区显示节点链（带耗时）
+      if (['tool_call', 'tool_result', 'error', 'phase_change'].includes(data.event)) {
+        const stepDiv = document.createElement('div');
+        const isError = data.event === 'error' || (data.event === 'tool_result' && !data.success);
+        const isPhase = data.event === 'phase_change';
+        
+        if (isPhase) {
+          stepDiv.className = 'text-indigo-500 font-medium mt-2 mb-1';
+        } else if (isError) {
+          stepDiv.className = 'text-red-400';
+        } else {
+          stepDiv.className = 'text-gray-400';
+        }
+        
+        // 显示耗时
+        const durationText = duration ? ` <span class="text-gray-500">(${duration})</span>` : '';
+        stepDiv.innerHTML = `• ${label}${durationText}`;
+        stepsEl.appendChild(stepDiv);
+        
+        // 滚动到底部
+        document.getElementById('messageList').scrollTop = document.getElementById('messageList').scrollHeight;
+      }
+      
+      // 任务完成后显示完整节点链
+      if ((data.event === 'complete' || data.event === 'final_response') && toolChain.length > 0) {
+        renderToolChainSummary(stepsEl, totalDuration);
+      }
+    }
+    
+    // 处理阶段变更
+    function handlePhaseChange(data) {
+      const stepsEl = document.getElementById('agentSteps');
+      
+      // 如果有 Plan 信息，显示
+      if (data.plan) {
+        currentPlan = data.plan;
+        const planDiv = document.createElement('div');
+        planDiv.className = 'mt-2 p-2 bg-indigo-50 rounded-lg text-xs text-indigo-700';
+        planDiv.innerHTML = `
+          <div class="font-medium mb-1">📋 计划详情</div>
+          <div class="grid grid-cols-2 gap-1">
+            <div><span class="text-indigo-500">ID:</span> ${data.plan.toolId}</div>
+            <div><span class="text-indigo-500">名称:</span> ${data.plan.toolName}</div>
+            <div><span class="text-indigo-500">图标:</span> ${data.plan.icon}</div>
+            <div><span class="text-indigo-500">颜色:</span> ${data.plan.color}</div>
+          </div>
+          ${data.plan.features?.length ? `<div class="mt-1"><span class="text-indigo-500">功能:</span> ${data.plan.features.join(', ')}</div>` : ''}
+        `;
+        stepsEl.appendChild(planDiv);
+      }
+    }
+    
+    // 格式化耗时
+    function formatDuration(ms) {
+      if (ms < 1000) return `${ms}ms`;
+      if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
+      return `${Math.floor(ms / 60000)}m ${Math.floor((ms % 60000) / 1000)}s`;
+    }
+    
+    // 渲染工具链汇总
+    function renderToolChainSummary(container, totalDuration) {
+      const summaryDiv = document.createElement('div');
+      summaryDiv.className = 'mt-3 pt-3 border-t border-gray-200';
+      
+      const chainStr = toolChain.map((t, i) => {
+        const icon = t.success ? '✓' : '✗';
+        const color = t.success ? 'text-green-500' : 'text-red-500';
+        return `<span class="${color}">${icon}</span>${t.tool}<span class="text-gray-400">(${formatDuration(t.duration)})</span>`;
+      }).join(' → ');
+      
+      summaryDiv.innerHTML = `
+        <div class="text-xs text-gray-500 mb-1">📊 执行链路</div>
+        <div class="text-xs font-mono">${chainStr}</div>
+        <div class="text-xs text-green-600 mt-1">⏱ 总耗时: ${totalDuration}</div>
+      `;
+      container.appendChild(summaryDiv);
+    }
+
+    // 验证状态存储
+    let validationState = {
+      htmlValid: null,
+      jsValid: null,
+      functionalValid: null,
+      reviewPassed: null
+    };
+
+    // 处理验证相关事件
+    function handleValidationEvent(data) {
+      if (!data.result) return;
+      
+      const validationStatusEl = document.getElementById('validationStatus');
+      validationStatusEl?.classList.remove('hidden');
+      
+      if (data.tool === 'validate_code') {
+        // 更新 HTML 和 JS 验证状态
+        validationState.htmlValid = data.result.htmlValid;
+        validationState.jsValid = data.result.jsValid;
+        validationState.functionalValid = data.result.functionalValid;
+        
+        updateStatusIcon('statusHtml', data.result.htmlValid);
+        updateStatusIcon('statusJs', data.result.jsValid);
+        updateStatusIcon('statusFunc', data.result.functionalValid);
+      } else if (data.tool === 'review_code') {
+        // 更新 LLM 审核状态
+        validationState.reviewPassed = data.result.passed;
+        updateStatusIcon('statusReview', data.result.passed);
+      }
+      
+      // 更新汇总信息（综合所有验证结果）
+      updateValidationSummary();
+    }
+
+    // 更新验证汇总
+    function updateValidationSummary() {
+      const summaryEl = document.getElementById('validationSummary');
+      if (!summaryEl) return;
+      
+      const { htmlValid, jsValid, functionalValid, reviewPassed } = validationState;
+      
+      // 如果还有未完成的验证，显示等待状态
+      if (htmlValid === null && jsValid === null && functionalValid === null && reviewPassed === null) {
+        summaryEl.textContent = '等待验证...';
+        summaryEl.className = 'text-xs text-gray-500';
+        return;
+      }
+      
+      // 统计问题
+      const issues = [];
+      if (htmlValid === false) issues.push('HTML');
+      if (jsValid === false) issues.push('JS');
+      if (functionalValid === false) issues.push('功能');
+      if (reviewPassed === false) issues.push('LLM审核');
+      
+      if (issues.length === 0 && reviewPassed !== null) {
+        summaryEl.textContent = '全部通过';
+        summaryEl.className = 'text-xs text-green-600 font-medium';
+      } else if (issues.length > 0) {
+        summaryEl.textContent = `${issues.join('、')} 未通过`;
+        summaryEl.className = 'text-xs text-red-600 font-medium';
+      } else {
+        summaryEl.textContent = '验证中...';
+        summaryEl.className = 'text-xs text-yellow-600';
+      }
+    }
+
+    // 更新单个状态图标
+    function updateStatusIcon(elementId, isValid) {
+      const el = document.getElementById(elementId);
+      if (!el) return;
+      
+      const icon = el.querySelector('i');
+      if (icon) {
+        icon.className = isValid 
+          ? 'fas fa-check-circle text-green-500' 
+          : 'fas fa-times-circle text-red-500';
+      }
+    }
+
+    // 重置验证状态
+    function resetValidationStatus() {
+      // 重置状态存储
+      validationState = {
+        htmlValid: null,
+        jsValid: null,
+        functionalValid: null,
+        reviewPassed: null
+      };
+      
+      const validationStatusEl = document.getElementById('validationStatus');
+      if (validationStatusEl) {
+        validationStatusEl.classList.add('hidden');
+      }
+      
+      ['statusHtml', 'statusJs', 'statusFunc', 'statusReview'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          const icon = el.querySelector('i');
+          if (icon) {
+            icon.className = 'fas fa-circle text-gray-300';
+          }
+        }
+      });
+      
+      const summaryEl = document.getElementById('validationSummary');
+      if (summaryEl) {
+        summaryEl.textContent = '等待验证...';
+        summaryEl.className = 'text-xs text-gray-500';
+      }
+    }
+
+    // 加载预览（使用 API 路径）
+    function loadPreview(taskId, previewPath) {
+      const frame = document.getElementById('previewFrame');
+      if (!frame) return;
+      
+      // 显示验证状态栏
+      const validationStatusEl = document.getElementById('validationStatus');
+      validationStatusEl?.classList.remove('hidden');
+      
+      if (previewPath) {
+        // 使用 API 路径（添加时间戳防止缓存）
+        frame.src = previewPath + '?t=' + Date.now();
+      } else if (taskId) {
+        // 使用任务 ID 构建默认 API 路径
+        frame.src = `/api/ai/previews/${taskId}/latest?t=${Date.now()}`;
+      }
+      
+      // 监听加载完成，进行前端验证
+      frame.onload = () => {
+        validatePreviewFrame(frame);
+      };
+      
+      frame.onerror = () => {
+        console.error('预览加载失败');
+      };
+    }
+
+    // 独立页面预览
+    function openPreviewPage() {
+      if (!currentTask) {
+        showToast('没有可预览的任务', 'error');
+        return;
+      }
+      
+      // 使用新的 API 路径
+      const previewUrl = `/api/ai/previews/${currentTask.id}/latest?t=${Date.now()}`;
+      
+      // 在新窗口打开
+      window.open(previewUrl, '_blank', 'width=1200,height=800');
+    }
+
+    // 前端验证预览 iframe
+    function validatePreviewFrame(frame) {
+      try {
+        const doc = frame.contentDocument;
+        if (!doc) return;
+        
+        // 检查是否有 JS 错误（需要预览页面配合上报）
+        const hasJsError = frame.contentWindow._jsError;
+        
+        // 检查功能元素
+        const hasButtons = doc.querySelectorAll('button').length > 0;
+        const hasInputs = doc.querySelectorAll('input, textarea, select').length > 0;
+        const hasFunctional = hasButtons || hasInputs;
+        
+        // 如果后端验证未更新状态，前端可以补充
+        // 这里只做显示，不覆盖后端结果
+        console.log('[Preview] 前端验证:', { hasJsError, hasFunctional });
+      } catch (e) {
+        // 跨域限制，忽略
+        console.log('[Preview] 无法访问 iframe 内容（跨域）');
+      }
+    }
+
+    // 从文件读取完整代码（避免 JSON 截断问题）
+    async function loadCodeFromFile(filePath) {
+      try {
+        const response = await fetch(filePath + '?t=' + Date.now());
+        if (response.ok) {
+          const code = await response.text();
+          setCodeContent(code);
+          // 同步更新到当前任务（内存中）
+          if (currentTask) {
+            currentTask.generatedCode = code;
+          }
+        } else {
+          console.error('[Code] 文件加载失败:', response.status);
+          // 回退到 JSON 中的代码
+          if (currentTask?.generatedCode) {
+            setCodeContent(normalizeCode(currentTask.generatedCode));
+          }
+        }
+      } catch (e) {
+        console.error('[Code] 读取代码文件失败:', e);
+        // 回退到 JSON 中的代码
+        if (currentTask?.generatedCode) {
+          setCodeContent(normalizeCode(currentTask.generatedCode));
+        }
+      }
+    }
+
+    // ========== 日志功能 ==========
+    function addLog(event, message, data = {}) {
+      if (!currentTask) return;
+      if (!event) return; // 忽略无效事件
+      
+      const taskId = currentTask.id;
+      if (!taskLogs[taskId]) taskLogs[taskId] = [];
+      
+      const logEntry = {
+        time: new Date().toISOString(),
+        event,
+        message: message || event,
+        data: JSON.parse(JSON.stringify(data)) // 深拷贝
+      };
+      taskLogs[taskId].push(logEntry);
+      
+      // 实时更新日志显示
+      renderLogs();
+      
+      // 实时保存到后端
+      saveLogsDebounced();
+    }
+
+    // 防抖保存日志（避免频繁写入）
+    let saveLogsTimer = null;
+    function saveLogsDebounced() {
+      if (saveLogsTimer) clearTimeout(saveLogsTimer);
+      saveLogsTimer = setTimeout(async () => {
+        if (currentTask && taskLogs[currentTask.id]) {
+          // 保存到独立日志文件
+          await fetch(`/api/ai/tasks/${currentTask.id}/logs`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ logs: taskLogs[currentTask.id] })
+          });
+        }
+      }, 500);
+    }
+
+    // 加载任务日志
+    async function loadTaskLogs(taskId) {
+      try {
+        const res = await fetch(`/api/ai/tasks/${taskId}/logs`);
+        const data = await res.json();
+        if (data.success && data.data) {
+          taskLogs[taskId] = data.data;
+        }
+      } catch (e) { /* ignore */ }
+    }
+
+    function renderLogs() {
+      const logsEl = document.getElementById('logsContent');
+      if (!logsEl || !currentTask) return;
+      
+      const logs = taskLogs[currentTask.id] || [];
+      if (logs.length === 0) {
+        logsEl.innerHTML = '<div class="text-gray-500 text-center py-8">等待执行...</div>';
+        return;
+      }
+
+      const eventColors = {
+        start: 'text-blue-400',
+        user_input: 'text-cyan-400',
+        thinking: 'text-yellow-400',
+        llm_call: 'text-indigo-400',
+        tool_call: 'text-purple-400',
+        tool_result: 'text-green-400',
+        phase_change: 'text-indigo-300',
+        final_response: 'text-green-300',
+        complete: 'text-green-500',
+        error: 'text-red-400',
+        interrupted: 'text-orange-400'
+      };
+
+      logsEl.innerHTML = logs.map(log => {
+        const time = new Date(log.time).toLocaleTimeString('zh-CN');
+        const color = eventColors[log.event] || 'text-gray-400';
+        let detail = '';
+        
+        // 显示耗时
+        const durationText = log.data?.duration ? ` <span class="text-yellow-400">[${log.data.duration}]</span>` : '';
+        
+        // 根据事件类型显示详情
+        if (log.event === 'tool_call' && log.data.args) {
+          detail = `\n    <span class="text-gray-500">参数:</span> ${JSON.stringify(log.data.args, null, 2).split('\n').slice(0, 3).join('\n')}...`;
+        } else if (log.event === 'tool_result' && log.data.result) {
+          const resultStr = typeof log.data.result === 'string' ? log.data.result : JSON.stringify(log.data.result);
+          detail = `\n    <span class="text-red-300">${resultStr.slice(0, 100)}${resultStr.length > 100 ? '...' : ''}</span>`;
+        } else if (log.event === 'error') {
+          detail = `\n    <span class="text-red-300">${log.data.content || log.data.error || ''}</span>`;
+        }
+
+        return `<div class="mb-2 border-l-2 border-gray-700 pl-3">
+  <span class="text-gray-500">[${time}]</span> <span class="${color}">[${log.event}]</span>${durationText} ${log.message}${detail}
+</div>`;
+      }).join('');
+      
+      // 自动滚动到底部
+      logsEl.scrollTop = logsEl.scrollHeight;
+    }
+
+    function clearLogs() {
+      if (currentTask) {
+        taskLogs[currentTask.id] = [];
+        renderLogs();
+      }
+    }
+
+    function downloadLogs() {
+      if (!currentTask) return;
+      
+      const logs = taskLogs[currentTask.id] || [];
+      const logText = logs.map(log => {
+        const time = new Date(log.time).toLocaleString('zh-CN');
+        return `[${time}] [${log.event}] ${log.message}\n${log.data ? '    ' + JSON.stringify(log.data, null, 2).replace(/\n/g, '\n    ') : ''}`;
+      }).join('\n\n');
+
+      const content = `# AI工具生成日志
+任务ID: ${currentTask.id}
+任务名称: ${currentTask.name}
+生成时间: ${new Date().toLocaleString('zh-CN')}
+状态: ${statusLabels[currentTask.status] || currentTask.status}
+
+==================== 执行日志 ====================
+
+${logText}
+
+==================== 生成代码 ====================
+
+${currentTask.generatedCode || '(无)'}
+`;
+
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${currentTask.id}-log.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function updatePathInfo() {
+      const pathInfoEl = document.getElementById('pathInfo');
+      const codePathEl = document.getElementById('codePath');
+      const dataPathEl = document.getElementById('dataPath');
+      
+      if (!pathInfoEl || !currentTask) return;
+      
+      pathInfoEl.classList.remove('hidden');
+      if (currentTask.generatedTool?.id) {
+        codePathEl.textContent = `public/tools/${currentTask.generatedTool.id}.html`;
+      } else {
+        codePathEl.textContent = '（待生成）';
+      }
+      dataPathEl.textContent = `data/ai/logs/${currentTask.id}.json`;
+    }
+
+    async function updateTask(updates) {
+      try {
+        await fetch(`/api/ai/tasks/${currentTask.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updates)
+        });
+      } catch (err) { console.error(err); }
+    }
+
+    function extractJSON(text) {
+      const match = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/\{[\s\S]*\}/);
+      if (match) {
+        const jsonStr = match[1] || match[0];
+        return JSON.parse(jsonStr);
+      }
+      return null;
+    }
+
+    // 规范化代码（处理 JSON 存储导致的转义问题）
+    function normalizeCode(code) {
+      if (!code) return '';
+      // 处理双重转义的字符
+      let result = code;
+      // 先处理双重转义
+      result = result.split('\\\\n').join('\n');
+      result = result.split('\\\\t').join('\t');
+      result = result.split('\\\\"').join('"');
+      result = result.split("\\\\'").join("'");
+      // 再处理单重转义
+      result = result.split('\\n').join('\n');
+      result = result.split('\\t').join('\t');
+      result = result.split('\\"').join('"');
+      result = result.split("\\'").join("'");
+      return result;
+    }
+
+    // 代码语法高亮函数
+    function highlightCode(code) {
+      if (!code) return '';
+      
+      // 转义 HTML 特殊字符
+      let html = code
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      
+      // DOCTYPE
+      html = html.replace(/(&lt;!DOCTYPE\s+\w+&gt;)/gi, '<span class="hl-doctype">$1</span>');
+      
+      // HTML 注释
+      html = html.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="hl-comment">$1</span>');
+      
+      // script 和 style 标签内容特殊处理
+      html = html.replace(/(&lt;script[\s\S]*?&gt;)([\s\S]*?)(&lt;\/script&gt;)/gi, (match, open, content, close) => {
+        return highlightTag(open) + highlightJS(content) + highlightTag(close);
+      });
+      
+      html = html.replace(/(&lt;style[\s\S]*?&gt;)([\s\S]*?)(&lt;\/style&gt;)/gi, (match, open, content, close) => {
+        return highlightTag(open) + highlightCSS(content) + highlightTag(close);
+      });
+      
+      // HTML 标签
+      html = html.replace(/(&lt;\/?)([\w-]+)([^&]*?)(\/?&gt;)/g, (match, start, tag, attrs, end) => {
+        let result = `<span class="hl-operator">${start}</span><span class="hl-tag">${tag}</span>`;
+        if (attrs) {
+          // 属性高亮
+          result += attrs.replace(/([\w-]+)(=)(&quot;|&#39;)(.*?)(\3)/g, 
+            '<span class="hl-attr">$1</span><span class="hl-operator">$2</span><span class="hl-string">$3$4$5</span>');
+        }
+        result += `<span class="hl-operator">${end}</span>`;
+        return result;
+      });
+      
+      return html;
+    }
+
+    function highlightTag(tag) {
+      return tag.replace(/(&lt;\/?)([\w-]+)([^&]*?)(&gt;)/g, (match, start, tagName, attrs, end) => {
+        let result = `<span class="hl-operator">${start}</span><span class="hl-tag">${tagName}</span>`;
+        if (attrs) {
+          result += attrs.replace(/([\w-]+)(=)(&quot;|&#39;)(.*?)(\3)/g, 
+            '<span class="hl-attr">$1</span><span class="hl-operator">$2</span><span class="hl-string">$3$4$5</span>');
+        }
+        result += `<span class="hl-operator">${end}</span>`;
+        return result;
+      });
+    }
+
+    function highlightJS(code) {
+      // JS 关键字
+      const keywords = ['const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'break', 'continue', 'new', 'this', 'class', 'extends', 'import', 'export', 'default', 'try', 'catch', 'finally', 'throw', 'async', 'await', 'true', 'false', 'null', 'undefined'];
+      
+      // 字符串（单引号和双引号）
+      code = code.replace(/(&#39;[^&#]*?&#39;|&quot;[^&]*?&quot;)/g, '<span class="hl-string">$1</span>');
+      
+      // 模板字符串
+      code = code.replace(/(`[^`]*`)/g, '<span class="hl-string">$1</span>');
+      
+      // 单行注释
+      code = code.replace(/(\/\/.*?)(\n|$)/g, '<span class="hl-comment">$1</span>$2');
+      
+      // 数字
+      code = code.replace(/\b(\d+\.?\d*)\b/g, '<span class="hl-number">$1</span>');
+      
+      // 关键字
+      keywords.forEach(kw => {
+        const regex = new RegExp(`\\b(${kw})\\b`, 'g');
+        code = code.replace(regex, '<span class="hl-keyword">$1</span>');
+      });
+      
+      // 函数调用
+      code = code.replace(/\b([\w$]+)(\s*\()/g, '<span class="hl-function">$1</span>$2');
+      
+      return code;
+    }
+
+    function highlightCSS(code) {
+      // CSS 属性
+      code = code.replace(/([\w-]+)(\s*:\s*)([^;{}]+)(;?)/g, 
+        '<span class="hl-attr">$1</span><span class="hl-operator">$2</span><span class="hl-string">$3</span>$4');
+      
+      // 选择器
+      code = code.replace(/([.#]?[\w-]+)(\s*\{)/g, '<span class="hl-tag">$1</span>$2');
+      
+      return code;
+    }
+
+    // 设置代码内容（带高亮）
+    function setCodeContent(code) {
+      const el = document.getElementById('codeContent');
+      if (code) {
+        el.innerHTML = highlightCode(code);
+      } else {
+        el.innerHTML = '<span class="hl-comment">// 等待生成...</span>';
+      }
+    }
+
+    function switchTab(tab) {
+      ['code', 'info', 'logs'].forEach(t => {
+        document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1)).className = 
+          t === tab ? 'flex-1 px-4 py-2 text-sm font-medium border-b-2 border-purple-500 text-purple-600'
+                    : 'flex-1 px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700';
+        document.getElementById('panel' + t.charAt(0).toUpperCase() + t.slice(1)).classList.toggle('hidden', t !== tab);
+      });
+    }
+
+    function regenerate() {
+      const input = document.getElementById('inputBox');
+      input.value = '请重新生成，';
+      input.focus();
+    }
+
+    async function adoptTask() {
+      if (!currentTask || currentTask.status !== 'completed') {
+        showToast('任务未完成，无法采纳', 'error');
+        return;
+      }
+
+      if (!confirm(`确定采纳并部署工具「${currentTask.generatedTool.name}」？\n\n部署后可在工具管理中添加到侧边栏。`)) return;
+
+      try {
+        const res = await fetch(`/api/ai/tasks/${currentTask.id}/adopt`, { method: 'POST' });
+        const data = await res.json();
+        
+        if (data.success) {
+          currentTask.status = 'adopted';
+          currentTask.adoptedVersion = data.data.adoptedVersion;
+          renderTaskList();
+          document.getElementById('currentTaskStatus').textContent = `已采纳 (v${data.data.adoptedVersion})`;
+          document.getElementById('btnAdopt').disabled = true;
+          updateToolInfo(); // 刷新工具信息显示版本
+          showToast(`工具已采纳并部署 (v${data.data.adoptedVersion})！刷新页面后可在工具管理中添加到侧边栏`, 'success');
+        } else {
+          showToast(data.message, 'error');
+        }
+      } catch (err) {
+        showToast('采纳失败: ' + err.message, 'error');
+      }
+    }
+
+    function showSettings() {
+      document.getElementById('apiEndpoint').value = config.endpoint || '';
+      document.getElementById('apiKey').value = config.apiKey || '';
+      document.getElementById('apiModel').value = config.model || '';
+      document.getElementById('apiTemp').value = config.temperature ?? 1.5;
+      document.getElementById('settingsModal').classList.remove('hidden');
+      document.getElementById('settingsModal').classList.add('flex');
+    }
+
+    function closeSettings() {
+      document.getElementById('settingsModal').classList.add('hidden');
+      document.getElementById('settingsModal').classList.remove('flex');
+    }
+
+    async function saveSettings() {
+      const newConfig = {
+        apiType: 'openai',
+        endpoint: document.getElementById('apiEndpoint').value,
+        apiKey: document.getElementById('apiKey').value,
+        model: document.getElementById('apiModel').value,
+        temperature: parseFloat(document.getElementById('apiTemp').value)
+      };
+      
+      try {
+        const res = await fetch('/api/ai/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newConfig)
+        });
+        const data = await res.json();
+        if (data.success) {
+          config = newConfig;
+          closeSettings();
+          showToast('配置已保存', 'success');
+        }
+      } catch (err) {
+        showToast('保存失败', 'error');
+      }
+    }
+
+    async function testApi() {
+      showToast('测试连接中...', 'info');
+      try {
+        const res = await fetch('/api/ai/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            messages: [{ role: 'user', content: '你好，请回复"连接成功"' }],
+            systemPrompt: '请简短回复'
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('API 连接成功！', 'success');
+        } else {
+          showToast('连接失败: ' + data.message, 'error');
+        }
+      } catch (err) {
+        showToast('连接失败: ' + err.message, 'error');
+      }
+    }
+
+    function showToast(message, type = 'success') {
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      const icon = { success: 'check-circle', error: 'exclamation-circle', info: 'info-circle' }[type];
+      toast.innerHTML = `<i class="fas fa-${icon} mr-2"></i>${message}`;
+      document.body.appendChild(toast);
+      setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 3000);
+    }
+  </script>
+</body>
+</html>

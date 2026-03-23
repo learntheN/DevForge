@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>网站收藏</title>
+  <script src="/assets/js/tailwind.js"></script>
+  <link rel="stylesheet" href="/assets/css/fontawesome.min.css">
+  <style>
+    body { opacity: 0; transition: opacity 0.1s; }
+    body.ready { opacity: 1; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; color: white; font-weight: 500; z-index: 1000; animation: fadeIn 0.3s ease-out; }
+    .toast-success { background: #22c55e; }
+    .toast-error { background: #ef4444; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+    .category-item { transition: all 0.2s; border-left: 3px solid transparent; }
+    .category-item:hover { background-color: #f8fafc; }
+    .category-item.active { background-color: #eff6ff; border-left-color: #3b82f6; }
+    .bookmark-card { transition: all 0.2s; }
+    .bookmark-card:hover { transform: translateY(-2px); box-shadow: 0 8px 25px -5px rgba(0,0,0,0.1); }
+    .iframe-container { position: fixed; inset: 0; z-index: 100; background: white; display: none; }
+    .iframe-container.show { display: flex; flex-direction: column; }
+    .iframe-header { background: linear-gradient(to right, #1e293b, #334155); color: white; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  </style>
+</head>
+<body class="bg-gray-50 h-screen overflow-hidden">
+  <div class="flex h-full">
+    <!-- 左侧分类列表 -->
+    <aside class="w-64 bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+      <div class="p-4 border-b border-gray-100">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="font-semibold text-gray-800">分类</h2>
+          <button onclick="showAddCategory()" class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="新建分类">
+            <i class="fas fa-plus"></i>
+          </button>
+        </div>
+        <div class="relative">
+          <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"></i>
+          <input type="text" id="searchInput" placeholder="搜索网站..." 
+            class="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            oninput="filterBookmarks()">
+        </div>
+      </div>
+      <div class="flex-1 overflow-y-auto py-2" id="categoryList"></div>
+      <div class="p-3 border-t border-gray-100 text-xs text-gray-400 text-center">
+        共 <span id="totalCount">0</span> 个收藏
+      </div>
+    </aside>
+    
+    <!-- 右侧收藏列表 -->
+    <main class="flex-1 flex flex-col overflow-hidden">
+      <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+        <div>
+          <h1 id="currentCategoryName" class="text-xl font-bold text-gray-900">全部收藏</h1>
+          <p id="currentCategoryDesc" class="text-sm text-gray-500">所有收藏的网站</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button onclick="showAddBookmark()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium">
+            <i class="fas fa-plus mr-2"></i>添加收藏
+          </button>
+          <button onclick="editCurrentCategory()" id="editCategoryBtn" class="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors hidden" title="编辑分类">
+            <i class="fas fa-edit"></i>
+          </button>
+        </div>
+      </header>
+      <div class="flex-1 overflow-auto p-6">
+        <div id="bookmarkGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"></div>
+        <div id="emptyState" class="hidden flex-col items-center justify-center h-full text-gray-400">
+          <i class="fas fa-bookmark text-5xl mb-4 opacity-30"></i>
+          <p class="text-lg">暂无收藏</p>
+          <p class="text-sm mt-1">点击右上角添加网站收藏</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- 站内浏览 iframe -->
+  <div id="iframeContainer" class="iframe-container">
+    <div class="iframe-header">
+      <button onclick="closeIframe()" class="p-2 hover:bg-white/10 rounded-lg"><i class="fas fa-arrow-left"></i></button>
+      <div class="flex-1 min-w-0">
+        <div id="iframeTitle" class="font-medium truncate">加载中...</div>
+        <div id="iframeUrl" class="text-xs text-gray-400 truncate"></div>
+      </div>
+      <a id="iframeExternal" href="#" target="_blank" class="p-2 hover:bg-white/10 rounded-lg" title="新窗口打开"><i class="fas fa-external-link-alt"></i></a>
+      <button onclick="closeIframe()" class="p-2 hover:bg-white/10 rounded-lg"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="flex-1"><iframe id="siteIframe" src="about:blank" class="w-full h-full border-none"></iframe></div>
+  </div>
+
+  <!-- 分类弹窗 -->
+  <div id="categoryModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md m-4 p-6">
+      <h3 id="categoryModalTitle" class="text-lg font-bold text-gray-900 mb-4">新建分类</h3>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">分类名称 *</label>
+          <input type="text" id="categoryName" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如：开发工具">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">图标</label>
+          <div class="flex gap-2">
+            <select id="categoryIcon" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg">
+              <option value="fa-folder">📁 文件夹</option>
+              <option value="fa-code">💻 代码</option>
+              <option value="fa-book">📚 文档</option>
+              <option value="fa-tools">🔧 工具</option>
+              <option value="fa-paint-brush">🎨 设计</option>
+              <option value="fa-chart-line">📈 数据</option>
+              <option value="fa-gamepad">🎮 娱乐</option>
+              <option value="fa-shopping-cart">🛒 购物</option>
+              <option value="fa-newspaper">📰 资讯</option>
+              <option value="fa-graduation-cap">🎓 学习</option>
+            </select>
+            <select id="categoryColor" class="w-24 px-3 py-2 border border-gray-300 rounded-lg">
+              <option value="blue">蓝色</option>
+              <option value="green">绿色</option>
+              <option value="purple">紫色</option>
+              <option value="orange">橙色</option>
+              <option value="red">红色</option>
+              <option value="cyan">青色</option>
+              <option value="pink">粉色</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-3 mt-6">
+        <button onclick="closeCategoryModal()" class="flex-1 px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">取消</button>
+        <button id="deleteCategoryBtn" onclick="deleteCategory()" class="px-4 py-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 hidden"><i class="fas fa-trash mr-1"></i>删除</button>
+        <button onclick="saveCategory()" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 收藏弹窗 -->
+  <div id="bookmarkModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-md m-4 p-6">
+      <h3 id="bookmarkModalTitle" class="text-lg font-bold text-gray-900 mb-4">添加收藏</h3>
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">网站名称 *</label>
+          <input type="text" id="bookmarkName" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="例如：GitHub">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">网址 *</label>
+          <input type="url" id="bookmarkUrl" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="https://github.com">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">图标</label>
+          <div class="flex gap-2">
+            <select id="bookmarkIcon" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg">
+              <option value="">自动获取</option>
+              <option value="fa-globe">🌐 网站</option>
+              <option value="fa-code">💻 代码</option>
+              <option value="fa-book">📚 文档</option>
+              <option value="fa-tools">🔧 工具</option>
+              <option value="fa-paint-brush">🎨 设计</option>
+              <option value="fa-chart-line">📈 数据</option>
+              <option value="fa-gamepad">🎮 娱乐</option>
+              <option value="fa-shopping-cart">🛒 购物</option>
+              <option value="fa-cloud">☁️ 云服务</option>
+              <option value="fa-github">🐙 GitHub</option>
+              <option value="fa-video">🎬 视频</option>
+              <option value="fa-music">🎵 音乐</option>
+            </select>
+            <select id="bookmarkColor" class="w-24 px-3 py-2 border border-gray-300 rounded-lg">
+              <option value="blue">蓝色</option>
+              <option value="green">绿色</option>
+              <option value="purple">紫色</option>
+              <option value="orange">橙色</option>
+              <option value="red">红色</option>
+              <option value="cyan">青色</option>
+              <option value="pink">粉色</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">描述</label>
+          <input type="text" id="bookmarkDesc" class="w-full px-3 py-2 border border-gray-300 rounded-lg" placeholder="简短描述（可选）">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">分类</label>
+          <select id="bookmarkCategory" class="w-full px-3 py-2 border border-gray-300 rounded-lg"></select>
+        </div>
+      </div>
+      <div class="flex gap-3 mt-6">
+        <button onclick="closeBookmarkModal()" class="flex-1 px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200">取消</button>
+        <button id="deleteBookmarkBtn" onclick="deleteBookmark()" class="px-4 py-2 text-red-600 bg-red-50 rounded-lg hover:bg-red-100 hidden"><i class="fas fa-trash mr-1"></i>删除</button>
+        <button onclick="saveBookmark()" class="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let categories = [];
+    let bookmarks = [];
+    let currentCategory = null;
+    let editingCategoryId = null;
+    let editingBookmarkId = null;
+    let searchQuery = '';
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadData();
+      document.body.classList.add('ready');
+    });
+
+    async function loadData() {
+      try {
+        const res = await fetch('/api/bookmarks');
+        const data = await res.json();
+        if (data.success) {
+          categories = data.data.categories || [];
+          bookmarks = data.data.bookmarks || [];
+        }
+      } catch (err) { console.error('加载失败:', err); }
+      render();
+    }
+
+    async function saveData() {
+      try {
+        await fetch('/api/bookmarks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ categories, bookmarks })
+        });
+      } catch (err) { showToast('保存失败', 'error'); }
+    }
+
+    function render() {
+      renderCategories();
+      renderBookmarks();
+      document.getElementById('totalCount').textContent = bookmarks.length;
+    }
+
+    function renderCategories() {
+      const container = document.getElementById('categoryList');
+      let html = `<div class="category-item flex items-center gap-3 px-4 py-2.5 cursor-pointer ${currentCategory === null ? 'active' : ''}" onclick="selectCategory(null)">
+        <i class="fas fa-globe w-5 text-center text-blue-500"></i>
+        <span class="flex-1 text-sm">全部收藏</span>
+        <span class="text-xs text-gray-400">${bookmarks.length}</span>
+      </div>`;
+      
+      categories.forEach(cat => {
+        const count = bookmarks.filter(b => b.categoryId === cat.id).length;
+        html += `<div class="category-item flex items-center gap-3 px-4 py-2.5 cursor-pointer ${currentCategory === cat.id ? 'active' : ''}" onclick="selectCategory('${cat.id}')">
+          <i class="fas ${cat.icon} w-5 text-center text-${cat.color}-500"></i>
+          <span class="flex-1 text-sm truncate">${cat.name}</span>
+          <span class="text-xs text-gray-400">${count}</span>
+        </div>`;
+      });
+      container.innerHTML = html;
+      
+      if (currentCategory === null) {
+        document.getElementById('currentCategoryName').textContent = '全部收藏';
+        document.getElementById('currentCategoryDesc').textContent = '所有收藏的网站';
+        document.getElementById('editCategoryBtn').classList.add('hidden');
+      } else {
+        const cat = categories.find(c => c.id === currentCategory);
+        if (cat) {
+          document.getElementById('currentCategoryName').textContent = cat.name;
+          document.getElementById('currentCategoryDesc').textContent = `${bookmarks.filter(b => b.categoryId === cat.id).length} 个网站`;
+          document.getElementById('editCategoryBtn').classList.remove('hidden');
+        }
+      }
+    }
+
+    function renderBookmarks() {
+      const container = document.getElementById('bookmarkGrid');
+      const emptyState = document.getElementById('emptyState');
+      
+      let filtered = bookmarks;
+      if (currentCategory !== null) filtered = filtered.filter(b => b.categoryId === currentCategory);
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        filtered = filtered.filter(b => b.name.toLowerCase().includes(q) || b.url.toLowerCase().includes(q) || (b.desc && b.desc.toLowerCase().includes(q)));
+      }
+      
+      if (filtered.length === 0) {
+        container.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+        emptyState.classList.add('flex');
+        return;
+      }
+      
+      container.classList.remove('hidden');
+      emptyState.classList.add('hidden');
+      emptyState.classList.remove('flex');
+      
+      container.innerHTML = filtered.map(bookmark => {
+        const cat = categories.find(c => c.id === bookmark.categoryId);
+        let domain = '';
+        try { domain = new URL(bookmark.url).hostname; } catch {}
+        
+        let iconHtml;
+        if (bookmark.icon) {
+          const color = bookmark.color || 'blue';
+          iconHtml = `<div class="w-10 h-10 bg-${color}-100 rounded-lg flex items-center justify-center flex-shrink-0"><i class="fas ${bookmark.icon} text-${color}-500"></i></div>`;
+        } else {
+          const favicon = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+          iconHtml = `<img src="${favicon}" class="w-10 h-10 rounded-lg bg-gray-100 flex-shrink-0" onerror="this.onerror=null;this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌐</text></svg>'">`;
+        }
+        
+        return `<div class="bookmark-card bg-white rounded-xl border border-gray-100 p-4 cursor-pointer" onclick="openSite('${bookmark.id}')">
+          <div class="flex items-start gap-3">
+            ${iconHtml}
+            <div class="flex-1 min-w-0">
+              <h3 class="font-medium text-gray-900 truncate">${bookmark.name}</h3>
+              <p class="text-xs text-gray-400 truncate">${domain}</p>
+            </div>
+            <button onclick="event.stopPropagation(); editBookmark('${bookmark.id}')" class="p-1.5 text-gray-300 hover:text-gray-500"><i class="fas fa-ellipsis-v"></i></button>
+          </div>
+          ${bookmark.desc ? `<p class="text-sm text-gray-500 mt-2 line-clamp-2">${bookmark.desc}</p>` : ''}
+          ${cat ? `<div class="mt-3 pt-3 border-t border-gray-50"><span class="text-xs px-2 py-1 bg-${cat.color}-50 text-${cat.color}-600 rounded-full">${cat.name}</span></div>` : ''}
+        </div>`;
+      }).join('');
+    }
+
+    function selectCategory(id) { currentCategory = id; render(); }
+    function filterBookmarks() { searchQuery = document.getElementById('searchInput').value; renderBookmarks(); }
+
+    // 分类操作
+    function showAddCategory() {
+      editingCategoryId = null;
+      document.getElementById('categoryModalTitle').textContent = '新建分类';
+      document.getElementById('categoryName').value = '';
+      document.getElementById('categoryIcon').value = 'fa-folder';
+      document.getElementById('categoryColor').value = 'blue';
+      document.getElementById('deleteCategoryBtn').classList.add('hidden');
+      document.getElementById('categoryModal').classList.remove('hidden');
+      document.getElementById('categoryModal').classList.add('flex');
+    }
+
+    function editCurrentCategory() {
+      const cat = categories.find(c => c.id === currentCategory);
+      if (!cat) return;
+      editingCategoryId = cat.id;
+      document.getElementById('categoryModalTitle').textContent = '编辑分类';
+      document.getElementById('categoryName').value = cat.name;
+      document.getElementById('categoryIcon').value = cat.icon;
+      document.getElementById('categoryColor').value = cat.color;
+      document.getElementById('deleteCategoryBtn').classList.remove('hidden');
+      document.getElementById('categoryModal').classList.remove('hidden');
+      document.getElementById('categoryModal').classList.add('flex');
+    }
+
+    function closeCategoryModal() {
+      document.getElementById('categoryModal').classList.add('hidden');
+      document.getElementById('categoryModal').classList.remove('flex');
+    }
+
+    async function saveCategory() {
+      const name = document.getElementById('categoryName').value.trim();
+      if (!name) { showToast('请输入分类名称', 'error'); return; }
+      const icon = document.getElementById('categoryIcon').value;
+      const color = document.getElementById('categoryColor').value;
+      
+      if (editingCategoryId) {
+        const cat = categories.find(c => c.id === editingCategoryId);
+        if (cat) { cat.name = name; cat.icon = icon; cat.color = color; }
+      } else {
+        categories.push({ id: Date.now().toString(), name, icon, color });
+      }
+      await saveData();
+      closeCategoryModal();
+      render();
+      showToast(editingCategoryId ? '分类已更新' : '分类已创建', 'success');
+    }
+
+    async function deleteCategory() {
+      if (!editingCategoryId || !confirm('确定删除此分类？')) return;
+      bookmarks.forEach(b => { if (b.categoryId === editingCategoryId) b.categoryId = null; });
+      categories = categories.filter(c => c.id !== editingCategoryId);
+      currentCategory = null;
+      await saveData();
+      closeCategoryModal();
+      render();
+      showToast('分类已删除', 'success');
+    }
+
+    // 收藏操作
+    function showAddBookmark() {
+      editingBookmarkId = null;
+      document.getElementById('bookmarkModalTitle').textContent = '添加收藏';
+      document.getElementById('bookmarkName').value = '';
+      document.getElementById('bookmarkUrl').value = '';
+      document.getElementById('bookmarkIcon').value = '';
+      document.getElementById('bookmarkColor').value = 'blue';
+      document.getElementById('bookmarkDesc').value = '';
+      document.getElementById('deleteBookmarkBtn').classList.add('hidden');
+      const select = document.getElementById('bookmarkCategory');
+      select.innerHTML = '<option value="">未分类</option>' + categories.map(c => `<option value="${c.id}" ${c.id === currentCategory ? 'selected' : ''}>${c.name}</option>`).join('');
+      document.getElementById('bookmarkModal').classList.remove('hidden');
+      document.getElementById('bookmarkModal').classList.add('flex');
+    }
+
+    function editBookmark(id) {
+      const bookmark = bookmarks.find(b => b.id === id);
+      if (!bookmark) return;
+      editingBookmarkId = id;
+      document.getElementById('bookmarkModalTitle').textContent = '编辑收藏';
+      document.getElementById('bookmarkName').value = bookmark.name;
+      document.getElementById('bookmarkUrl').value = bookmark.url;
+      document.getElementById('bookmarkIcon').value = bookmark.icon || '';
+      document.getElementById('bookmarkColor').value = bookmark.color || 'blue';
+      document.getElementById('bookmarkDesc').value = bookmark.desc || '';
+      document.getElementById('deleteBookmarkBtn').classList.remove('hidden');
+      const select = document.getElementById('bookmarkCategory');
+      select.innerHTML = '<option value="">未分类</option>' + categories.map(c => `<option value="${c.id}" ${c.id === bookmark.categoryId ? 'selected' : ''}>${c.name}</option>`).join('');
+      document.getElementById('bookmarkModal').classList.remove('hidden');
+      document.getElementById('bookmarkModal').classList.add('flex');
+    }
+
+    function closeBookmarkModal() {
+      document.getElementById('bookmarkModal').classList.add('hidden');
+      document.getElementById('bookmarkModal').classList.remove('flex');
+    }
+
+    async function saveBookmark() {
+      const name = document.getElementById('bookmarkName').value.trim();
+      let url = document.getElementById('bookmarkUrl').value.trim();
+      if (!name || !url) { showToast('请输入网站名称和网址', 'error'); return; }
+      if (!url.startsWith('http://') && !url.startsWith('https://')) url = 'https://' + url;
+      try { new URL(url); } catch { showToast('请输入有效的网址', 'error'); return; }
+      
+      const icon = document.getElementById('bookmarkIcon').value || null;
+      const color = document.getElementById('bookmarkColor').value;
+      const desc = document.getElementById('bookmarkDesc').value.trim();
+      const categoryId = document.getElementById('bookmarkCategory').value || null;
+      
+      if (editingBookmarkId) {
+        const bookmark = bookmarks.find(b => b.id === editingBookmarkId);
+        if (bookmark) { bookmark.name = name; bookmark.url = url; bookmark.icon = icon; bookmark.color = color; bookmark.desc = desc; bookmark.categoryId = categoryId; }
+      } else {
+        bookmarks.push({ id: Date.now().toString(), name, url, icon, color, desc, categoryId, createdAt: new Date().toISOString() });
+      }
+      await saveData();
+      closeBookmarkModal();
+      render();
+      showToast(editingBookmarkId ? '收藏已更新' : '收藏已添加', 'success');
+    }
+
+    async function deleteBookmark() {
+      if (!editingBookmarkId || !confirm('确定删除此收藏？')) return;
+      bookmarks = bookmarks.filter(b => b.id !== editingBookmarkId);
+      await saveData();
+      closeBookmarkModal();
+      render();
+      showToast('收藏已删除', 'success');
+    }
+
+    // iframe
+    function openSite(id) {
+      const bookmark = bookmarks.find(b => b.id === id);
+      if (!bookmark) return;
+      document.getElementById('iframeTitle').textContent = bookmark.name;
+      document.getElementById('iframeUrl').textContent = bookmark.url;
+      document.getElementById('iframeExternal').href = bookmark.url;
+      document.getElementById('siteIframe').src = bookmark.url;
+      document.getElementById('iframeContainer').classList.add('show');
+    }
+
+    function closeIframe() {
+      document.getElementById('iframeContainer').classList.remove('show');
+      document.getElementById('siteIframe').src = 'about:blank';
+    }
+
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeIframe(); closeCategoryModal(); closeBookmarkModal(); } });
+    document.getElementById('categoryModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeCategoryModal(); });
+    document.getElementById('bookmarkModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeBookmarkModal(); });
+
+    function showToast(message, type = 'info') {
+      const toast = document.createElement('div');
+      toast.className = `toast toast-${type}`;
+      toast.innerHTML = `<i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} mr-2"></i>${message}`;
+      document.body.appendChild(toast);
+      setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, 2000);
+    }
+  </script>
+</body>
+</html>
